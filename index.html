@@ -176,29 +176,94 @@
                             difficulty: null
                         };
                     } else if (hasAerobicGoal) {
-                        const isStrengthDay = (day % 3 === 0);
+                        // For runners - cardio focused with strength components
                         
-                        if (isStrengthDay) {
-                            const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || []);
-                            const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
+                        if (workoutsPerWeek <= 3) {
+                            // 3 or fewer workouts: All running + 2 have 10-15 min strength at the end
+                            const hasStrengthComponent = (day === 1 || day === 2);
                             
-                            workout = {
-                                day: day,
-                                type: 'כוח',
-                                exercises: exercisesWithWeights,
-                                completed: false,
-                                feedback: null,
-                                difficulty: null
-                            };
+                            if (hasStrengthComponent) {
+                                // Running workout with 10-15 min runner strength at the end
+                                const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, cardioTarget, week, workoutDuration);
+                                const strengthExercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '15');
+                                
+                                workout = {
+                                    day: day,
+                                    type: 'אירובי + כוח',
+                                    exercises: [
+                                        ...runningExercises,
+                                        { name: '━━━ חיזוק לרצים (10-15 דקות) ━━━', sets: 0, reps: '', rest: 0, notes: 'מעבר לתרגילי חיזוק' },
+                                        ...strengthExercises
+                                    ],
+                                    completed: false,
+                                    feedback: null,
+                                    difficulty: null
+                                };
+                            } else {
+                                // Pure running workout
+                                workout = {
+                                    day: day,
+                                    type: 'אירובי',
+                                    exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier, cardioTarget, week, workoutDuration),
+                                    completed: false,
+                                    feedback: null,
+                                    difficulty: null
+                                };
+                            }
+                        } else if (workoutsPerWeek >= 5) {
+                            // 5+ workouts: 2 are 40-min strength workouts, rest are running
+                            const isFullStrengthDay = (day === 2 || day === 5);
+                            
+                            if (isFullStrengthDay) {
+                                // Full 40-minute runner-specific strength workout
+                                const exercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '40');
+                                
+                                workout = {
+                                    day: day,
+                                    type: 'כוח לרצים',
+                                    exercises: exercises,
+                                    completed: false,
+                                    feedback: null,
+                                    difficulty: null
+                                };
+                            } else {
+                                // Running workout
+                                workout = {
+                                    day: day,
+                                    type: 'אירובי',
+                                    exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier, cardioTarget, week, workoutDuration),
+                                    completed: false,
+                                    feedback: null,
+                                    difficulty: null
+                                };
+                            }
                         } else {
-                            workout = {
-                                day: day,
-                                type: 'אירובי',
-                                exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier, cardioTarget, week, workoutDuration),
-                                completed: false,
-                                feedback: null,
-                                difficulty: null
-                            };
+                            // 4 workouts: 1 full strength, 3 running
+                            const isStrengthDay = (day === 2);
+                            
+                            if (isStrengthDay) {
+                                // 40-minute runner-specific strength workout
+                                const exercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '40');
+                                
+                                workout = {
+                                    day: day,
+                                    type: 'כוח לרצים',
+                                    exercises: exercises,
+                                    completed: false,
+                                    feedback: null,
+                                    difficulty: null
+                                };
+                            } else {
+                                // Running workout
+                                workout = {
+                                    day: day,
+                                    type: 'אירובי',
+                                    exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier, cardioTarget, week, workoutDuration),
+                                    completed: false,
+                                    feedback: null,
+                                    difficulty: null
+                                };
+                            }
                         }
                     } else {
                         if (day % 2 === 1) {
