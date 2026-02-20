@@ -1051,29 +1051,35 @@
             return exercises;
         };
 
-        // Advanced Running Workout Generator based on BC Running methodology
+        // Advanced Running Workout Generator based on BC Running (מועדון ארוחת הבוקר) methodology
+        // Core BC Running principles (Lydiard-based):
+        // 1. הדרגתיות (Gradualism) - build slowly, no shortcuts
+        // 2. מתינות (Moderation) - "train, don't strain"
+        // 3. האומץ להאט (Courage to slow down) - to run faster, first learn to run SLOWER
+        // 4. עקביות (Consistency) - long-term commitment builds champions
+        // 5. עבודה עם הגוף (Work with the body) - listen, adapt, respect recovery
+        // 6. פרטלק > אינטרוולים - creative fartlek preferred over rigid track intervals
+        // 7. בסיס אירובי (Aerobic base) - foundation before quality, Lydiard method
         const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals) => {
             const { runningLevel, raceGoal, weeklyMileage } = cardioTarget;
             const duration = parseInt(workoutDuration);
-            
-            // Determine workout type based on week pattern (following BC Running principles)
-            // Week pattern: Long Run, Easy Run, Quality/Interval, Progression/Tempo
-            const workoutPattern = week % 4;
-            
+
+            // BC Running 4-week cycle (Nachshon Shochat methodology):
+            // Week 1: Long Run (aerobic base) | Week 2: Easy + Strides
+            // Week 3: Fartlek (creative quality) | Week 4: Tempo OR Progression OR 5K test
+            const weekInCycle = ((week - 1) % 4) + 1; // 1, 2, 3, or 4
+
             if (runningLevel === 'beginner') {
-                // Walk-to-Run program based on uploaded document
                 return generateWalkToRunWorkout(week, duration);
             } else if (runningLevel === 'intermediate' || runningLevel === 'advanced') {
-                // Advanced running programs based on BC Running methodology
-                return generateAdvancedRunningWorkout(workoutPattern, duration, runningLevel, raceGoal, week);
+                return generateAdvancedRunningWorkout(weekInCycle, duration, runningLevel, raceGoal, week);
             }
-            
-            // Fallback to basic cardio
+
             return [{
                 name: 'ריצה קלה',
                 duration: `${duration} דקות`,
                 intensity: 'קצב שיחה - אירובי',
-                notes: 'ריצה בקצב שבו אפשר לנהל שיחה. התמקד בטכניקה ונשימה.'
+                notes: 'BC Running: "האומץ להאט" - ריצה בקצב שבו אפשר לנהל שיחה. התמקד בטכניקה ונשימה. עקביות > עצימות.'
             }];
         };
 
@@ -1126,189 +1132,204 @@
                 main: mainText,
                 cooldown: '5 דקות הליכה + מתיחות סטטיות: שוק, ירך קדמית, ירך אחורית',
                 notes: program.phase === '6'
-                    ? '🎉 ריצה רציפה! הגעת לשלב האחרון. ריצה בקצב שבו ניתן לנהל שיחה.'
-                    : 'עקרון ההדרגתיות הוא המפתח. אל תמהר. הריצה צריכה להיות קלילה ונוחה - "קצב שיחה".',
-                tips: 'אם האימון קשה מדי - חזור שבוע אחד אחורה. אם קל מדי - קדם שבוע קדימה.'
+                    ? 'ריצה רציפה! הגעת לשלב האחרון. BC Running: "הדרגתיות ועקביות לאורך 16 שבועות - זה המפתח". ריצה בקצב שבו ניתן לנהל שיחה.'
+                    : 'BC Running: "הדרגתיות, מתינות, עבודה עם הגוף". אל תמהר. הריצה צריכה להיות קלילה ונוחה - "קצב שיחה". עקביות > עצימות.',
+                tips: 'אם האימון קשה מדי - חזור שבוע אחד אחורה. אם קל מדי - קדם שבוע קדימה. BC Running: "האומץ להאט הוא הצעד הראשון לרוץ מהר יותר".'
             }];
         };
 
-        // Advanced Running Workout based on Nachshon Shochat 4-run/week methodology
-        // Run 1: Long easy with pickup | Run 2: Easy + strides | Run 3: Fartlek | Run 4: Progression / 5K test
-        const generateAdvancedRunningWorkout = (workoutPattern, duration, level, raceGoal, week) => {
-            // Every 4th week: replace progression run with 5K time trial
-            const isFourthWeek = week % 4 === 0;
+        // Advanced Running Workout - BC Running (מועדון ארוחת הבוקר) methodology
+        // Based on Nachshon Shochat + Lydiard periodization
+        // 4-week cycle: Long Run → Easy+Strides → Fartlek → Tempo/Progression/Test
+        const generateAdvancedRunningWorkout = (weekInCycle, duration, level, raceGoal, week) => {
+            // Every 8th week: 5K time trial (allows proper recovery between tests)
+            const is5KTestWeek = week % 8 === 0;
+            // Every 4th week (but not test week): tempo run instead of progression
+            const isTempoWeek = weekInCycle === 4 && week % 4 === 0 && !is5KTestWeek;
 
-            switch(workoutPattern) {
-                case 0: // Run 1: Long run with gentle pickup in final third
+            switch(weekInCycle) {
+                case 1: // Long Run - aerobic base building (BC Running: "עמוד התווך")
                     return generateLongRun(duration, level, raceGoal);
 
-                case 1: // Run 2: Easy run 40-60 min + 4-5 strides
+                case 2: // Easy Run + Strides (BC Running: 3-4 strides/week, even in warmup)
                     return generateEasyRunWithStrides(duration, level);
 
-                case 2: // Run 3: Fartlek (progressive per week pattern)
+                case 3: // Fartlek - creative quality (BC Running: preferred over rigid intervals)
                     return generateFartlekWorkout(duration, level, week);
 
-                case 3: // Run 4: Progression run OR 5K test (every 4th week)
-                    return isFourthWeek
-                        ? generate5KTestWorkout(duration, level)
-                        : generateProgressionRun(duration, level);
-
-                default:
-                    return generateEasyRunWithStrides(duration, level);
-            }
-        };
-
-        // Advanced Running Workout based on BC Running methodology
-        const generateAdvancedRunningWorkout = (workoutPattern, duration, level, raceGoal, week) => {
-            const isAdvanced = level === 'advanced';
-            
-            switch(workoutPattern) {
-                case 0: // Long Run (following BC Running principles)
-                    return generateLongRun(duration, level, raceGoal);
-                    
-                case 1: // Easy Run with Strides
-                    return generateEasyRunWithStrides(duration, level);
-                    
-                case 2: // Quality/Interval Workout (Fartlek style from BC Running)
-                    return generateFartlekWorkout(duration, level, week);
-                    
-                case 3: // Progression Run
+                case 4: // Quality session: 5K test / Tempo / Progression
+                    if (is5KTestWeek) return generate5KTestWorkout(duration, level);
+                    if (isTempoWeek || level === 'advanced') return generateTempoRun(duration, level, week);
                     return generateProgressionRun(duration, level);
-                    
+
                 default:
                     return generateEasyRunWithStrides(duration, level);
             }
         };
 
-        // Long Run - Nachshon Shochat methodology: easy with gentle pickup in final third
+        // Long Run - BC Running methodology: aerobic base, "courage to slow down"
+        // Nachshon Shochat: easy with gentle pickup in final third
+        // BC Running target: 25-26km or 2 hours; peak weeks 32-36km
         const generateLongRun = (duration, level, raceGoal) => {
+            const targetDist = level === 'advanced'
+                ? '25-32 ק"מ (שיא: 32-36 ק"מ בשבועות הטעינה)'
+                : '18-25 ק"מ בקצב שיחה מלא';
             return [{
-                name: 'ריצה ארוכה (Long Run)',
+                name: 'ריצה ארוכה (Long Run) - עמוד התווך',
                 duration: `${duration} דקות`,
                 warmup: getRunningWarmup(),
-                structure: 'שליש ראשון: ריצה קלה מאוד (קצב שיחה) | שליש שני: קצב אירובי יציב | שליש אחרון: הגברה מתונה ונוחה',
-                pace: 'קצב אירובי נוח (60-70% מקסימום דופק). ביום טוב - הגברה מתונה בשליש האחרון.',
-                cooldown: '5 דקות הליכה + מתיחות סטטיות',
+                structure: 'שליש ראשון: קל מאוד - קצב שיחה מלא (Zone 1-2) | שליש שני: אירובי יציב (Zone 2) | שליש אחרון: הגברה מתונה ונוחה בלבד',
+                pace: `קצב אירובי נוח (60-70% מקסימום דופק). יעד מרחק: ${targetDist}`,
+                cooldown: '5-10 דקות הליכה + מתיחות סטטיות ארוכות',
                 notes: level === 'advanced'
-                    ? 'ריצה ארוכה היא עמוד התווך של התוכנית. המטרה: בניית בסיס אירובי, לא מהירות. תרגיש שאפשר להמשיך בסיום.'
-                    : 'ריצה ארוכה בקצב נוח. "קצב שיחה" - אם אתה לא יכול לדבר, אתה רץ מהר מדי.',
-                tips: 'עיקרון נחשון שוחט: "רוץ את הארוכה לאט יותר ממה שאתה חושב שצריך". סיים בהרגשה טובה!'
+                    ? 'BC Running: הריצה הארוכה בונה את הבסיס האירובי - ה"בנק" של ה-VO2max, השריפת שומן, הסיבולת הנפשית. לא ריצת מהירות. סיים בהרגשה שאפשר היה להמשיך.'
+                    : 'BC Running: "האומץ להאט" - "כדי לרוץ מהר יותר, קודם כל צריך ללמוד לרוץ לאט יותר". קצב שיחה מלא לאורך כל הדרך.',
+                tips: 'נחשון שוחט: "רוץ את הארוכה לאט יותר ממה שאתה חושב שצריך". הדרגתיות + עקביות = שיפור לאורך זמן.',
+                bcPrinciple: 'train, don\'t strain | עבודה עם הגוף, לא נגדו'
             }];
         };
 
-        // Easy Run with Strides - 40-60 min + 4-5 strides (Nachshon Shochat Run #2)
+        // Easy Run with Strides - Nachshon Shochat + BC Running methodology
+        // BC Running: strides 3-4x/week, including in warmup for quality sessions
+        // מתגברות = short accelerations to improve stride mechanics and running economy
         const generateEasyRunWithStrides = (duration, level) => {
             const mainDuration = Math.max(25, duration - 10);
+            const stridesCount = level === 'advanced' ? '5-6' : '4-5';
             return [{
-                name: 'ריצה קלה עם מתגברות',
+                name: 'ריצה קלה עם מתגברות (Easy Run + Strides)',
                 duration: `${duration} דקות (40-60 דקות אידיאלי)`,
                 warmup: getRunningWarmup(),
-                main: `${mainDuration} דקות ריצה קלה בקצב שיחה`,
-                strides: '4-5 מתגברות של 80-100 מטר: תאוצה הדרגתית עד 90% מהירות, הליכה חזרה בין כל מתגברת',
+                main: `${mainDuration} דקות ריצה קלה בקצב שיחה מלא (Zone 1-2)`,
+                strides: `${stridesCount} מתגברות של 80-100 מטר: תאוצה הדרגתית עד 90% מהירות → 3 שניות בשיא → הגברה לאט, הליכה חזרה (90 שניות) בין כל מתגברת`,
                 cooldown: '5 דקות ריצה קלה מאוד + מתיחות סטטיות',
-                notes: 'ריצה קלה = קצב שיחה לאורך כל האימון. בסוף: מתגברות במישור עם רוח בגב.',
-                tips: 'המתגברות אינן ספרינט! תאוצה חלקה ונוחה. הן משפרות טכניקה וכלכליות ריצה.'
+                notes: 'BC Running: מתגברות 3-4 פעמים בשבוע (כולל בחימום לאימוני איכות). הן משפרות מכניקת צעד, כלכליות ריצה וקשר עצבי-שרירי. ריצה קלה = קצב שיחה מלא לאורך כל האימון.',
+                tips: 'המתגברות אינן ספרינט! תאוצה חלקה ונוחה - כמו מטוס שממריא. הגוף לא מכנס אנרגיה אנאירובית. בשטח שטוח עם רוח גב אם אפשר.'
             }];
         };
 
-        // Fartlek - Nachshon Shochat progression across 3 weeks (Run #3)
-        // Week 1: 8-12 × 60s/60s | Week 2: 6-8 × 3min/3min | Week 3: Pyramid + sprints
+        // Fartlek - BC Running methodology: creative, free, not on a track
+        // BC Running: "פרטלק הוא אימון גמיש ויצירתי, רחוק ממלבן המסלול"
+        // Combines aerobic + anaerobic, race simulations, hills, sudden bursts
+        // Nachshon Shochat 3-week progression: Short → Medium → Pyramid
         const generateFartlekWorkout = (duration, level, week) => {
             const weekInCycle = ((week - 1) % 3) + 1; // 1, 2, or 3
 
             const fartlekVariations = [
                 {
-                    name: 'פרטלק קצר - אינטרוולים של דקה',
-                    warmup: '15-20 דקות ריצה קלה + 4 מתגברות של 80מ\'',
+                    name: 'פרטלק קצר - "משחק מהירות" (Short Fartlek)',
+                    warmup: '15-20 דקות ריצה קלה + 4 מתגברות של 80מ\' (חלק מהחימום לאימוני איכות - BC Running)',
                     main: level === 'advanced'
-                        ? '10-12 × (60 שניות מהיר / 60 שניות ג\'וג קל)'
-                        : '8-10 × (60 שניות מהיר / 60 שניות ג\'וג קל)',
+                        ? '10-12 × (60 שניות מהיר / 60 שניות ג\'וג קל) - עדיף בשטח טבעי, לא מסלול!'
+                        : '8-10 × (60 שניות מהיר / 60 שניות ג\'וג קל) - גבעות, שבילים, פארק',
                     cooldown: '10 דקות ריצה קלה + מתיחות',
-                    notes: 'ה"מהיר" = קצב 5K-10K (מאתגר אך ניתן לשמירה). ה"קל" = ג\'וג נוח. שמור על קצב קבוע לאורך כל החזרות.',
+                    notes: 'BC Running: "פרטלק = שחרור יצירתי ומהנה". ה"מהיר" = קצב 5K (מאתגר אך לא מקסימלי). ה"קל" = ג\'וג קל שמאפשר שיחה. שמור על קצב קבוע מהחזרה הראשונה לאחרונה.',
                     intensity: 'גבוהה - VO2max',
-                    tip: 'עיקרון: אל תפתח מהר מדי! החזרה האחרונה צריכה להיות זהה לראשונה.'
+                    tip: 'BC Running: אל תגיע למסלול! שטח טבעי, גבעות, שבילים - הם הזירה הטבעית של הפרטלק. עיקרון: "train, don\'t strain".'
                 },
                 {
-                    name: 'פרטלק בינוני - אינטרוולים של 3 דקות',
+                    name: 'פרטלק בינוני - סף לקטט (Medium Fartlek)',
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
                     main: level === 'advanced'
-                        ? '6-8 × (3 דקות מהיר-בינוני / 3 דקות קל)'
-                        : '5-6 × (3 דקות מהיר-בינוני / 3 דקות קל)',
+                        ? '6-8 × (3 דקות מהיר-בינוני / 3 דקות קל) - שנה כיוון, כלול גבעות, הפתע את עצמך'
+                        : '5-6 × (3 דקות מהיר-בינוני / 3 דקות קל) - קצב חצי מרתון',
                     cooldown: '10 דקות ריצה קלה + מתיחות',
-                    notes: 'ה"מהיר-בינוני" = קצב חצי מרתון (ניתן לשמירה כל 3 דקות). ה"קל" = ג\'וג קל.',
+                    notes: 'BC Running: ה"מהיר-בינוני" = קצב 10K-חצי מרתון (ניתן לשמירה לאורך 3 דקות בכל חזרה). זה אזור הסף הלקטי - ה"מנוע" שמשפר את הריצה לאורך זמן.',
                     intensity: 'בינונית-גבוהה - Lactate Threshold',
-                    tip: 'פרטלק הוא "משחק מהירות" - גמיש ומהנה. ניתן לעשות בשטח טבעי ולא על מסלול.'
+                    tip: 'פרטלק = "משחק מהירות" שוודי. גמיש ומהנה. ניתן לשנות על פי תחושה ביום - זו חוזקתו.'
                 },
                 {
-                    name: 'פרטלק פירמידה',
-                    warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
-                    main: 'פירמידה: 2 דקות → 4 דקות → 6 דקות → 4 דקות → 2 דקות (מהיר), 2-3 דקות ג\'וג קל בין כל פרק. סיום: 4 × 30 שניות ספרינט / 60 שניות ג\'וג',
+                    name: 'פרטלק פירמידה + ספרינטים (Pyramid Fartlek)',
+                    warmup: '15-20 דקות ריצה קלה + 4-5 מתגברות',
+                    main: 'פירמידה: 2→4→6→4→2 דקות (מהיר), 2-3 דקות ג\'וג קל בין כל פרק. סיום: 4×30 שניות ספרינט (א-לקטי) / 60 שניות ג\'וג',
                     cooldown: '10 דקות ריצה קלה + מתיחות',
-                    notes: 'פירמידה = עבודה על טווחי קצב שונים. הקצב ב-2 דקות מהיר יותר מב-6 דקות.',
+                    notes: 'BC Running: הפירמידה עובדת על כל טווחי הקצב. הקצב ב-2 דקות מהיר מב-6 דקות. הספרינטים הקצרים בסוף (≤30 שניות במאמץ מירבי) = אימון "א-לקטי" שמשפר מהירות טהורה לפי שיטת לידיארד.',
                     intensity: 'גבוהה-מאוד גבוהה',
-                    tip: 'הספרינטים בסוף - נשמרים "בטנק". הם קצרים, מהירים, ומשפרים את היכולת האנאירובית.'
+                    tip: 'BC Running: שמור את הספרינטים "בטנק". הם קצרים (עד 10-30 שניות) ומירביים. זו הדרך לשפר מהירות טהורה - לא חזרות 400מ\' ארוכות!'
                 }
             ];
 
             return [fartlekVariations[weekInCycle - 1]];
         };
 
-        // Progression Run - Nachshon Shochat Run #4: easy out, gradually faster back, last km hard
-        const generateProgressionRun = (duration, level) => {
-            const half = Math.round(duration / 2);
+        // Tempo Run - BC Running: LT training based on Pfitzinger / BC Running methodology
+        // BC Running: 3-5km warmup then 6-11km tempo at LT pace; strong VO2max stimulus
+        // "גירוי חזק לשיפור קצב סף חומצת החלב" (BC Running on tempo runs)
+        const generateTempoRun = (duration, level, week) => {
+            const warmupKm = level === 'advanced' ? '3-5 ק"מ' : '2-3 ק"מ';
+            const tempoKm = level === 'advanced' ? '8-12 ק"מ' : '5-8 ק"מ';
+            const tempoMin = Math.round(duration * 0.6);
             return [{
-                name: 'ריצת פרוגרסיה (Progression Run)',
+                name: 'ריצת טמפו (Tempo Run) - סף לקטט',
                 duration: `${duration} דקות`,
-                warmup: getRunningWarmup(),
-                structure: level === 'advanced'
-                    ? `${Math.round(duration * 0.35)} דקות קל → ${Math.round(duration * 0.35)} דקות קצב מרתון → ${Math.round(duration * 0.3)} דקות קצב חצי מרתון → קילומטר אחרון: כל מה שיש!`
-                    : `מחצית ראשונה (${half} דקות): ריצה קלה בקצב שיחה → מחצית שנייה: הגברה הדרגתית, דקות אחרונות: מאמץ מקסימלי`,
-                cooldown: '5 דקות הליכה + מתיחות סטטיות',
-                notes: 'עיקרון: "הלוך קל - חזור מהיר". ריצה בנגיעה הפוכה לכיוון הבית. הגברה הדרגתית - לא קפיצות פתאומיות.',
-                tips: 'נחשון שוחט: "הסוד הוא לא להתחיל מהר מדי. רוצו את הקל לאט יותר, לרוץ את המהר מהר יותר"'
+                warmup: `${warmupKm} ריצה קלה + ` + getRunningWarmup() + ' + 3-4 מתגברות',
+                main: `${tempoMin} דקות / ${tempoKm} בקצב טמפו (קצב 10K + 20-30 שניות לק"מ)`,
+                cooldown: '10-15 דקות ריצה קלה מאוד + מתיחות ארוכות',
+                notes: 'BC Running: קצב טמפו = "נוח-קשה". דופק 80-90% מקסימום. ניתן לדבר מילים בודדות אבל לא משפטים. זהו אימון סף הלקטי - מגביר את היכולת לרוץ מהר יותר עם פחות חומצת חלב.',
+                tips: 'לא מהיר מדי! קצב טמפו ≠ קצב 5K. BC Running: "אינטרוולים עצימים מוגזמים פוגעים ברצי ארוכות - הטמפו הוא הנשק הסודי".',
+                bcPrinciple: '"גירוי חזק לשיפור קצב סף חומצת החלב" | 12-16 ק"מ טמפו שבועי (BC Running מרתון)'
             }];
         };
 
-        // 5K Test/Time Trial - replaces progression run every 4th week
+        // Progression Run - Nachshon Shochat Run #4 + BC Running "negatively split"
+        // BC Running: "easy out, fast back" - builds mental strength and race pacing
+        const generateProgressionRun = (duration, level) => {
+            const half = Math.round(duration / 2);
+            return [{
+                name: 'ריצת פרוגרסיה (Negative Split / Progression Run)',
+                duration: `${duration} דקות`,
+                warmup: getRunningWarmup(),
+                structure: level === 'advanced'
+                    ? `${Math.round(duration * 0.35)} דקות קל (Zone 1-2) → ${Math.round(duration * 0.35)} דקות קצב מרתון (Zone 3) → ${Math.round(duration * 0.25)} דקות קצב חצי מרתון (Zone 4) → ק"מ אחרון: כל מה שיש!`
+                    : `מחצית ראשונה (${half} דקות): ריצה קלה בקצב שיחה (Zone 1-2) → מחצית שנייה: הגברה הדרגתית, דקות אחרונות: מאמץ גבוה (Zone 3-4)`,
+                cooldown: '5-10 דקות הליכה + מתיחות סטטיות',
+                notes: 'BC Running: "הלוך קל - חזור מהיר". הגברה הדרגתית מלמדת ניהול קצב (Pacing) - מיומנות קריטית במרתון. לא קפיצות פתאומיות - הדרגתיות!',
+                tips: 'נחשון שוחט: "הסוד הוא לא להתחיל מהר מדי. הפיתוי הגדול ביותר הוא לצאת מהר מדי. כפה על עצמך להאט בהתחלה."'
+            }];
+        };
+
+        // 5K Test/Time Trial - BC Running: "מבחן כושר" every 8 weeks
+        // BC Running recommends tune-up races (10K) 3-5 weeks before marathon
         const generate5KTestWorkout = (duration, level) => {
             return [{
-                name: '5K מבחן (בדיקת כושר)',
-                duration: `כ-30-40 דקות (כולל חימום וצינון)`,
-                warmup: getRunningWarmup() + ' | + 2-3 קמ ריצה קלה + 4 מתגברות',
-                main: 'ריצה מקסימלית של 5 ק"מ - מדוד את הזמן!',
-                cooldown: '10 דקות ריצה קלה מאוד + מתיחות ארוכות',
-                notes: 'מבחן כל 4 שבועות לבדיקת התקדמות. הקצב ב-5K משמש כבסיס לכל חישובי הקצב.',
-                tips: 'לאחר המבחן: רשום את הזמן ועדכן את קצבי האימון בהתאם. שיפור של 10-30 שניות בשבוע הוא נפלא!'
+                name: '5K מבחן / מירוץ כושר (Tune-Up Race)',
+                duration: `כ-35-45 דקות (כולל חימום וצינון)`,
+                warmup: '2-3 ק"מ ריצה קלה + ' + getRunningWarmup() + ' + 4-5 מתגברות 80מ\'',
+                main: 'ריצה מקסימלית של 5 ק"מ - מדוד את הזמן! יצא שלילי-ספליט (נגטיב ספליט).',
+                cooldown: '10-15 דקות ריצה קלה מאוד + מתיחות ארוכות (10+ דקות)',
+                notes: 'BC Running: מבחן כל 8 שבועות (לא ישן יותר מדי) לבדיקת התקדמות. הקצב ב-5K משמש כבסיס לחישוב כל קצבי האימון: טמפו, פרטלק, אינטרוולים. אם השתתפת במירוץ 10K - זה עדיף!',
+                tips: 'לאחר המבחן: רשום את הזמן → עדכן קצבי אימון → שיפור של 10-30 שניות כל 8 שבועות = מעולה. BC Running: "מבחן + תחרות = מוטיבציה + כיוון ברור".'
             }];
         };
 
         // Run Less Run Faster (RLRF) - 3 key workouts methodology
+        // BC Running perspective: fewer runs but each is quality ("train, don't strain")
         // Intervals (VO2max) + Tempo (LT) + Long Run
         const generateRLRFWorkout = (workoutType, duration, level, week) => {
             if (workoutType === 'intervals') {
                 const weekInCycle = ((week - 1) % 4) + 1;
+                // BC Running: 600-2000m intervals at 95-100% VO2max (3-5K race pace)
                 const intervalSets = [
-                    '6 × 400מ\' (אחיזה: 5K) + 400מ\' ג\'וג בין חזרות',
-                    '4 × 800מ\' (קצב 5K) + 400מ\' ג\'וג',
-                    '3 × 1200מ\' (קצב 5K-10K) + 400מ\' ג\'וג',
+                    '6 × 400מ\' (קצב 5K) + 400מ\' ג\'וג קל בין חזרות',
+                    '4 × 800מ\' (קצב 5K-10K) + 400מ\' ג\'וג',
+                    '3 × 1200מ\' (קצב 10K) + 400מ\' ג\'וג',
                     '5 × 600מ\' (קצב 5K) + 300מ\' ג\'וג'
                 ];
                 return [{
-                    name: 'ריצת אינטרוולים (RLRF - Workout 1)',
+                    name: 'ריצת אינטרוולים (RLRF Workout 1 / VO2max)',
                     warmup: '10-15 דקות ריצה קלה + מתיחות דינמיות + 4 מתגברות',
                     main: intervalSets[weekInCycle - 1],
                     cooldown: '10-15 דקות ריצה קלה',
-                    notes: 'RLRF: 3 אימונים בשבוע במקום 5-6. כל אימון הוא "מפתח" ולכן חייב להיות איכותי.',
-                    tips: 'קצב 5K = קצב שניתן לשמור ב-5K תחרות. כל חזרה זהה בקצב.'
+                    notes: 'RLRF: 3 אימונים מרכזיים בשבוע = כל אחד חייב להיות איכותי. BC Running: אינטרוולים 600-2000מ\' ב-95-100% VO2max (קצב תחרות 3-5K). גירוי חזק לשיפור VO2max.',
+                    tips: 'BC Running: "רבים מפריזים במינון ובתדירות של אינטרוולים עצימים עבור רצי ארוכות". RLRF פותר זאת: רק אימון אחד של אינטרוולים שבועי, אך הוא איכותי.'
                 }];
             } else if (workoutType === 'tempo') {
                 return [{
-                    name: 'ריצת טמפו (RLRF - Workout 2)',
-                    warmup: '1.5-3 קמ ריצה קלה',
-                    main: `${Math.round(duration * 0.6)} דקות ריצת טמפו (קצב 10K / 15-45 שניות איטי מקצב 5K)`,
+                    name: 'ריצת טמפו (RLRF Workout 2 / Lactate Threshold)',
+                    warmup: '2-3 ק"מ ריצה קלה + מתגברות',
+                    main: `${Math.round(duration * 0.6)} דקות / 6-11 ק"מ ריצת טמפו (קצב 10K + 20 שניות לק"מ)`,
                     cooldown: '10 דקות ריצה קלה',
-                    notes: 'ריצת טמפו = מאמץ "נוח-קשה". דופק 80-90% מקסימום. ניתן לדבר מילים בודדות.',
-                    tips: 'RLRF: הטמפו משפר את סף הלקטט - הנקודה שבה הגוף עובר לאנאירובי.'
+                    notes: 'ריצת טמפו = מאמץ "נוח-קשה". דופק 80-90% מקסימום. ניתן לדבר מילים בודדות. BC Running: "גירוי חזק לשיפור קצב סף חומצת החלב". חימום: 3-5 ק"מ לפני הטמפו.',
+                    tips: 'BC Running + RLRF: הטמפו הוא "הנשק הסודי" לרצי ארוכות. יעיל יותר מחזרות 400מ\' לרצי מרתון.'
                 }];
             }
             return generateLongRun(duration, level, null);
