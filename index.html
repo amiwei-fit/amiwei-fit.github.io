@@ -149,6 +149,45 @@
             }
         };
 
+        // Claude AI plan update
+        const callClaudeForPlanUpdate = async (plan, instruction, apiKey) => {
+            const systemPrompt = `אתה עוזר מאמן כושר מקצועי. תפקידך לעדכן תוכניות אימון לפי הוראות המאמן.
+חוקים חשובים:
+- החזר JSON תקני בלבד, עטוף ב-\`\`\`json ... \`\`\`
+- שמור בדיוק על אותו מבנה נתונים (weeks, workouts, exercises עם כל השדות)
+- אל תשנה שדות כמו completed, feedback, feedbackRead אלא אם התבקשת
+- שמור על העברית בכל הטקסטים`;
+
+            const userPrompt = `תוכנית האימון הנוכחית:\n\`\`\`json\n${JSON.stringify(plan, null, 2)}\n\`\`\`\n\nהוראת המאמן: ${instruction}\n\nעדכן את התוכנית לפי ההוראה והחזר JSON בלבד.`;
+
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify({
+                    model: 'claude-haiku-4-5-20251001',
+                    max_tokens: 16000,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: userPrompt }]
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `שגיאת API: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const text = data.content[0].text;
+            const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+            const jsonStr = jsonMatch ? jsonMatch[1] : text.trim();
+            return JSON.parse(jsonStr);
+        };
+
         // 1RM Percentage Table based on Repetitions
         const rm1PercentageTable = {
             1: 100, 2: 97, 3: 94, 4: 92, 5: 89, 6: 86, 7: 83, 8: 81, 9: 78, 10: 75,
@@ -2371,7 +2410,7 @@
         }
 
         // Plan Preview and Editor
-        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onUpdatePlan }) {
+        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onUpdatePlan, confirmLabel }) {
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [editingExercise, setEditingExercise] = useState(null);
             const [showSuggestions, setShowSuggestions] = useState(false);
@@ -2443,7 +2482,7 @@
                                     onClick={onSave}
                                     className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition shadow-lg"
                                 >
-                                    ✓ אשר ושמור תוכנית
+                                    ✓ {confirmLabel || 'אשר ושמור תוכנית'}
                                 </button>
                             </div>
                         </div>
@@ -2559,7 +2598,7 @@
                                 className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition shadow-lg flex items-center gap-2"
                             >
                                 <span>✓</span>
-                                אשר ושמור - מוכן לשליחה למתאמן
+                                {confirmLabel || 'אשר ושמור - מוכן לשליחה למתאמן'}
                             </button>
                         </div>
                     </div>
@@ -2862,6 +2901,12 @@
             const [emailBody, setEmailBody] = useState('');
             const [websiteUrl, setWebsiteUrl] = useState('');
             const [showUrlInput, setShowUrlInput] = useState(false);
+            const [showEditPlan, setShowEditPlan] = useState(false);
+            const [editingPlan, setEditingPlan] = useState(null);
+            const [aiPrompt, setAiPrompt] = useState('');
+            const [aiLoading, setAiLoading] = useState(false);
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem('anthropicApiKey') || '');
+            const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
             // Load saved website URL from localStorage on mount
             useEffect(() => {
@@ -2938,6 +2983,106 @@ ${traineeLink}
                 await storage.updateTrainee(trainee.id, updatedTrainee);
             };
 
+            const handleOpenEdit = () => {
+                setEditingPlan(JSON.parse(JSON.stringify(trainee.workoutPlan)));
+                setShowEditPlan(true);
+            };
+
+            const handleSavePlan = async (updatedPlan) => {
+                try {
+                    await storage.updateTrainee(trainee.id, { workoutPlan: updatedPlan });
+                    setShowEditPlan(false);
+                    onBack();
+                } catch (error) {
+                    alert('שגיאה בשמירת התוכנית');
+                }
+            };
+
+            const handleAIUpdate = async () => {
+                if (!aiPrompt.trim()) return;
+                if (!apiKey.trim()) {
+                    setShowApiKeyInput(true);
+                    alert('נא להזין מפתח Anthropic API');
+                    return;
+                }
+                localStorage.setItem('anthropicApiKey', apiKey.trim());
+                setAiLoading(true);
+                try {
+                    const updatedPlan = await callClaudeForPlanUpdate(editingPlan, aiPrompt, apiKey.trim());
+                    setEditingPlan(updatedPlan);
+                    setAiPrompt('');
+                } catch (error) {
+                    alert('שגיאה בעדכון AI: ' + error.message);
+                }
+                setAiLoading(false);
+            };
+
+            if (showEditPlan && editingPlan) {
+                return (
+                    <div className="min-h-screen bg-gray-50">
+                        <div className="gradient-bg text-white p-6 shadow-lg">
+                            <div className="max-w-6xl mx-auto">
+                                <button onClick={() => setShowEditPlan(false)} className="mb-4 text-white hover:text-purple-100 font-semibold flex items-center gap-2">
+                                    ← חזרה לתצוגת מתאמן
+                                </button>
+                                <h1 className="text-2xl font-bold">עריכת תוכנית — {trainee.name}</h1>
+                            </div>
+                        </div>
+
+                        <div className="max-w-4xl mx-auto p-6">
+                            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-purple-200">
+                                <h2 className="text-lg font-bold text-purple-800 mb-3">עדכון תוכנית עם AI ✨</h2>
+                                <p className="text-sm text-gray-500 mb-4">כתוב הוראה בעברית חופשית. לדוגמה: "הוסף תרגילי ליבה לכל יום ריצה" או "הקטן נפח בשבוע 1 ב-20%"</p>
+                                <textarea
+                                    value={aiPrompt}
+                                    onChange={e => setAiPrompt(e.target.value)}
+                                    placeholder="כתוב כאן הוראה לעדכון התוכנית..."
+                                    rows={3}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-right resize-none mb-3"
+                                    dir="rtl"
+                                />
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <button
+                                        onClick={handleAIUpdate}
+                                        disabled={aiLoading || !aiPrompt.trim()}
+                                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+                                    >
+                                        {aiLoading ? '⏳ מעדכן...' : '✨ עדכן עם AI'}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowApiKeyInput(v => !v)}
+                                        className="text-sm text-gray-500 hover:text-gray-700 underline"
+                                    >
+                                        {showApiKeyInput ? 'הסתר מפתח API' : 'הגדר מפתח API'}
+                                    </button>
+                                </div>
+                                {showApiKeyInput && (
+                                    <div className="mt-3">
+                                        <input
+                                            type="password"
+                                            value={apiKey}
+                                            onChange={e => setApiKey(e.target.value)}
+                                            placeholder="sk-ant-..."
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                                        />
+                                        <p className="text-xs text-gray-400 mt-1">מפתח ה-API נשמר בדפדפן שלך בלבד</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <PlanPreviewEditor
+                                workoutPlan={editingPlan}
+                                formData={trainee}
+                                onUpdatePlan={setEditingPlan}
+                                onSave={() => handleSavePlan(editingPlan)}
+                                onBack={() => setShowEditPlan(false)}
+                                confirmLabel="שמור שינויים"
+                            />
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="min-h-screen bg-gray-50">
                     <div className="gradient-bg text-white p-6 shadow-lg">
@@ -2955,13 +3100,22 @@ ${traineeLink}
                                         {trainee.email}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => setShowShareModal(true)}
-                                    className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition flex items-center gap-2"
-                                >
-                                    <span>📤</span>
-                                    שלח תוכנית למתאמן
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleOpenEdit}
+                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-semibold hover:bg-purple-200 transition flex items-center gap-2"
+                                    >
+                                        <span>✏️</span>
+                                        ערוך תוכנית
+                                    </button>
+                                    <button
+                                        onClick={() => setShowShareModal(true)}
+                                        className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition flex items-center gap-2"
+                                    >
+                                        <span>📤</span>
+                                        שלח תוכנית למתאמן
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
