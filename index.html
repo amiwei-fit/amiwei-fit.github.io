@@ -120,6 +120,32 @@
                     console.error('Error deleting trainee:', error);
                     throw error;
                 }
+            },
+
+            archiveTrainee: async (traineeId) => {
+                try {
+                    await db.collection('trainees').doc(traineeId).update({
+                        archived: true,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('✅ Trainee archived:', traineeId);
+                } catch (error) {
+                    console.error('Error archiving trainee:', error);
+                    throw error;
+                }
+            },
+
+            restoreTrainee: async (traineeId) => {
+                try {
+                    await db.collection('trainees').doc(traineeId).update({
+                        archived: false,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('✅ Trainee restored:', traineeId);
+                } catch (error) {
+                    console.error('Error restoring trainee:', error);
+                    throw error;
+                }
             }
         };
 
@@ -1486,6 +1512,7 @@
             const [showCreateForm, setShowCreateForm] = useState(false);
             const [selectedTrainee, setSelectedTrainee] = useState(null);
             const [loading, setLoading] = useState(true);
+            const [showArchive, setShowArchive] = useState(false);
 
             useEffect(() => {
                 loadTrainees();
@@ -1505,6 +1532,38 @@
             const handleLogout = () => {
                 sessionStorage.removeItem('trainerAuth');
                 window.location.reload();
+            };
+
+            const handleArchive = async (e, traineeId) => {
+                e.stopPropagation();
+                try {
+                    await storage.archiveTrainee(traineeId);
+                    await refreshTrainees();
+                } catch (error) {
+                    alert('שגיאה בהעברה לארכיון');
+                }
+            };
+
+            const handleRestore = async (e, traineeId) => {
+                e.stopPropagation();
+                try {
+                    await storage.restoreTrainee(traineeId);
+                    await refreshTrainees();
+                } catch (error) {
+                    alert('שגיאה בשחזור מתאמן');
+                }
+            };
+
+            const handleDelete = async (e, trainee) => {
+                e.stopPropagation();
+                if (window.confirm(`למחוק את "${trainee.name}" לצמיתות?\nפעולה זו אינה הפיכה.`)) {
+                    try {
+                        await storage.deleteTrainee(trainee.id);
+                        await refreshTrainees();
+                    } catch (error) {
+                        alert('שגיאה במחיקת מתאמן');
+                    }
+                }
             };
 
             if (loading) {
@@ -1542,6 +1601,10 @@
                 );
             }
 
+            const activeTrainees = trainees.filter(t => !t.archived);
+            const archivedTrainees = trainees.filter(t => t.archived);
+            const displayTrainees = showArchive ? archivedTrainees : activeTrainees;
+
             return (
                 <div className="min-h-screen bg-gray-50">
                     <div className="gradient-bg text-white p-6 shadow-lg">
@@ -1571,44 +1634,58 @@
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-lg p-6">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6">המתאמנים שלי ({trainees.length})</h2>
-                            
-                            {trainees.length === 0 ? (
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">המתאמנים שלי</h2>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowArchive(false)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${!showArchive ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    >
+                                        פעילים ({activeTrainees.length})
+                                    </button>
+                                    <button
+                                        onClick={() => setShowArchive(true)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showArchive ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    >
+                                        ארכיון ({archivedTrainees.length})
+                                    </button>
+                                </div>
+                            </div>
+
+                            {displayTrainees.length === 0 ? (
                                 <div className="text-center py-12 text-gray-500">
-                                    <div className="text-6xl mb-4">📭</div>
-                                    <p className="text-xl">אין עדיין מתאמנים במערכת</p>
-                                    <p className="text-sm mt-2">לחץ על "צור תוכנית למתאמן חדש" כדי להתחיל</p>
+                                    <div className="text-6xl mb-4">{showArchive ? '📦' : '📭'}</div>
+                                    <p className="text-xl">{showArchive ? 'הארכיון ריק' : 'אין עדיין מתאמנים פעילים'}</p>
+                                    {!showArchive && <p className="text-sm mt-2">לחץ על "צור תוכנית למתאמן חדש" כדי להתחיל</p>}
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {trainees.map(trainee => {
-                                        const totalWorkouts = trainee.workoutPlan.weeks.reduce((sum, week) => 
+                                    {displayTrainees.map(trainee => {
+                                        const totalWorkouts = trainee.workoutPlan.weeks.reduce((sum, week) =>
                                             sum + week.workouts.length, 0
                                         );
-                                        const completedWorkouts = trainee.workoutPlan.weeks.reduce((sum, week) => 
+                                        const completedWorkouts = trainee.workoutPlan.weeks.reduce((sum, week) =>
                                             sum + week.workouts.filter(w => w.completed).length, 0
                                         );
                                         const progress = Math.round((completedWorkouts / totalWorkouts) * 100);
-                                        
-                                        const hasNewFeedback = trainee.workoutPlan.weeks.some(week => 
+
+                                        const hasNewFeedback = !showArchive && trainee.workoutPlan.weeks.some(week =>
                                             week.workouts.some(w => w.feedback && w.feedbackSentToTrainer && !w.feedbackRead)
                                         );
 
                                         return (
                                             <div
                                                 key={trainee.id}
-                                                onClick={() => setSelectedTrainee(trainee)}
-                                                className="bg-gray-50 hover:bg-gray-100 p-6 rounded-xl transition-all cursor-pointer relative"
+                                                onClick={() => !showArchive && setSelectedTrainee(trainee)}
+                                                className={`bg-gray-50 p-6 rounded-xl transition-all relative ${!showArchive ? 'hover:bg-gray-100 cursor-pointer' : 'opacity-80'}`}
                                             >
                                                 {hasNewFeedback && (
                                                     <div className="absolute top-3 left-3 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
                                                 )}
-                                                <div className="text-3xl mb-2">👤</div>
+                                                <div className="text-3xl mb-2">{showArchive ? '📦' : '👤'}</div>
                                                 <div className="font-bold text-gray-800 text-lg mb-1">{trainee.name}</div>
-                                                <div className="text-sm text-gray-600 mb-3">
-                                                    {trainee.email}
-                                                </div>
-                                                <div className="mb-2">
+                                                <div className="text-sm text-gray-600 mb-3">{trainee.email}</div>
+                                                <div className="mb-3">
                                                     <div className="flex items-center gap-2 mb-1">
                                                         <div className="flex-1 bg-gray-200 rounded-full h-2">
                                                             <div
@@ -1618,6 +1695,31 @@
                                                         </div>
                                                         <span className="text-sm font-semibold text-purple-600">{progress}%</span>
                                                     </div>
+                                                </div>
+                                                <div className="flex gap-2 pt-3 border-t border-gray-200" onClick={e => e.stopPropagation()}>
+                                                    {showArchive ? (
+                                                        <>
+                                                            <button
+                                                                onClick={(e) => handleRestore(e, trainee.id)}
+                                                                className="flex-1 text-xs py-2 px-3 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg font-medium transition-colors"
+                                                            >
+                                                                שחזר
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => handleDelete(e, trainee)}
+                                                                className="flex-1 text-xs py-2 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium transition-colors"
+                                                            >
+                                                                מחק לצמיתות
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => handleArchive(e, trainee.id)}
+                                                            className="flex-1 text-xs py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg font-medium transition-colors"
+                                                        >
+                                                            העבר לארכיון
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
