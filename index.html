@@ -1511,6 +1511,7 @@
             const [trainees, setTrainees] = useState([]);
             const [showCreateForm, setShowCreateForm] = useState(false);
             const [selectedTrainee, setSelectedTrainee] = useState(null);
+            const [editingTrainee, setEditingTrainee] = useState(null);
             const [loading, setLoading] = useState(true);
             const [showArchive, setShowArchive] = useState(false);
 
@@ -1577,13 +1578,30 @@
                 );
             }
 
+            if (editingTrainee) {
+                return (
+                    <EditTraineePlan
+                        trainee={editingTrainee}
+                        onBack={() => setEditingTrainee(null)}
+                        onComplete={() => {
+                            setEditingTrainee(null);
+                            refreshTrainees();
+                        }}
+                    />
+                );
+            }
+
             if (selectedTrainee) {
                 return (
-                    <TraineeDetailView 
-                        trainee={selectedTrainee} 
+                    <TraineeDetailView
+                        trainee={selectedTrainee}
                         onBack={() => {
                             setSelectedTrainee(null);
                             refreshTrainees();
+                        }}
+                        onEditPlan={(trainee) => {
+                            setSelectedTrainee(null);
+                            setEditingTrainee(trainee);
                         }}
                     />
                 );
@@ -2370,12 +2388,51 @@
             );
         }
 
+        // Edit Existing Trainee Plan
+        function EditTraineePlan({ trainee, onBack, onComplete }) {
+            const [currentPlan, setCurrentPlan] = useState(trainee.workoutPlan);
+            const [saving, setSaving] = useState(false);
+
+            const handleSavePlan = async () => {
+                setSaving(true);
+                try {
+                    await storage.updateTrainee(trainee.id, { workoutPlan: currentPlan });
+                    onComplete();
+                } catch (error) {
+                    console.error('Error updating plan:', error);
+                    alert('שגיאה בשמירת התוכנית. אנא נסה שוב.');
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            const handleRegeneratePlan = (systemPrompt) => {
+                const updatedFormData = { ...trainee, _systemPrompt: systemPrompt || '' };
+                const newPlan = generateWorkoutPlan(updatedFormData);
+                setCurrentPlan(newPlan);
+            };
+
+            return (
+                <PlanPreviewEditor
+                    formData={trainee}
+                    workoutPlan={currentPlan}
+                    onBack={onBack}
+                    onSave={handleSavePlan}
+                    onRegenerate={handleRegeneratePlan}
+                    onUpdatePlan={setCurrentPlan}
+                    isEditMode={true}
+                    saving={saving}
+                />
+            );
+        }
+
         // Plan Preview and Editor
-        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onUpdatePlan }) {
+        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onUpdatePlan, isEditMode, saving }) {
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [editingExercise, setEditingExercise] = useState(null);
             const [showSuggestions, setShowSuggestions] = useState(false);
             const [aiSuggestion, setAiSuggestion] = useState('');
+            const [systemPrompt, setSystemPrompt] = useState('');
 
             const currentWeek = workoutPlan.weeks[selectedWeek];
 
@@ -2423,7 +2480,7 @@
                                 onClick={onBack}
                                 className="text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-2"
                             >
-                                ← חזרה לעריכת פרטי מתאמן
+                                ← {isEditMode ? 'חזרה לפרטי מתאמן' : 'חזרה לעריכת פרטי מתאמן'}
                             </button>
                             <div className="flex gap-3">
                                 <button
@@ -2434,16 +2491,17 @@
                                     קבל הצעות שיפור
                                 </button>
                                 <button
-                                    onClick={onRegenerate}
+                                    onClick={() => onRegenerate(systemPrompt)}
                                     className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-semibold transition"
                                 >
                                     🔄 צור תוכנית מחדש
                                 </button>
                                 <button
                                     onClick={onSave}
-                                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition shadow-lg"
+                                    disabled={saving}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition shadow-lg disabled:opacity-60"
                                 >
-                                    ✓ אשר ושמור תוכנית
+                                    {saving ? '⏳ שומר...' : isEditMode ? '✓ שמור שינויים' : '✓ אשר ושמור תוכנית'}
                                 </button>
                             </div>
                         </div>
@@ -2487,6 +2545,19 @@
                                     <div><strong>רמה:</strong> {formData.activityLevel}</div>
                                     <div><strong>מטרות:</strong> {formData.goals.join(', ')}</div>
                                 </div>
+                            </div>
+
+                            {/* System Prompt */}
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+                                <h3 className="font-bold text-yellow-900 mb-1">💬 הוראות לשינוי התוכנית</h3>
+                                <p className="text-sm text-yellow-700 mb-3">הכנס הוראות ולחץ "צור תוכנית מחדש" כדי לקבל תוכנית מותאמת</p>
+                                <textarea
+                                    value={systemPrompt}
+                                    onChange={(e) => setSystemPrompt(e.target.value)}
+                                    placeholder="לדוגמה: הוסף יותר אימוני ריצה, הפחת עצימות, התמקד בחיזוק הגב העליון..."
+                                    className="w-full px-4 py-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent resize-none text-gray-800 bg-white"
+                                    rows={3}
+                                />
                             </div>
 
                             {/* Week Selector */}
@@ -2556,10 +2627,11 @@
                             </button>
                             <button
                                 onClick={onSave}
-                                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition shadow-lg flex items-center gap-2"
+                                disabled={saving}
+                                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition shadow-lg flex items-center gap-2 disabled:opacity-60"
                             >
                                 <span>✓</span>
-                                אשר ושמור - מוכן לשליחה למתאמן
+                                {saving ? 'שומר...' : isEditMode ? 'שמור שינויים' : 'אשר ושמור - מוכן לשליחה למתאמן'}
                             </button>
                         </div>
                     </div>
@@ -2856,7 +2928,7 @@
         }
 
         // Trainee Detail View (for trainer)
-        function TraineeDetailView({ trainee, onBack }) {
+        function TraineeDetailView({ trainee, onBack, onEditPlan }) {
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [showShareModal, setShowShareModal] = useState(false);
             const [emailBody, setEmailBody] = useState('');
@@ -2955,13 +3027,24 @@ ${traineeLink}
                                         {trainee.email}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => setShowShareModal(true)}
-                                    className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition flex items-center gap-2"
-                                >
-                                    <span>📤</span>
-                                    שלח תוכנית למתאמן
-                                </button>
+                                <div className="flex gap-3">
+                                    {onEditPlan && (
+                                        <button
+                                            onClick={() => onEditPlan(trainee)}
+                                            className="bg-white text-purple-700 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition flex items-center gap-2 border border-white"
+                                        >
+                                            <span>✏️</span>
+                                            ערוך תוכנית
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setShowShareModal(true)}
+                                        className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition flex items-center gap-2"
+                                    >
+                                        <span>📤</span>
+                                        שלח תוכנית למתאמן
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
