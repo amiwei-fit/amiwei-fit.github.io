@@ -250,6 +250,20 @@
             const isMuscleBuilding = goals.includes('עלייה במסת שריר');
             const hasAerobicGoal   = goals.includes('שיפור יכולת אירובית');
 
+            // Parse system prompt for workout modifications
+            const systemPromptText = (userData._systemPrompt || '');
+            const forcedCardioType =
+                (systemPromptText.includes('ריצה') || systemPromptText.includes('run')) ? 'ריצה' :
+                (systemPromptText.includes('אופניים') || systemPromptText.includes('bike') || systemPromptText.includes('cycling')) ? 'אופניים' :
+                (systemPromptText.includes('שחייה') || systemPromptText.includes('swim')) ? 'שחייה' :
+                (systemPromptText.includes('קפיצות חבל') || systemPromptText.includes('חבל')) ? 'קפיצות חבל' :
+                (systemPromptText.includes('אליפטיקל') || systemPromptText.includes('elliptical')) ? 'אליפטיקל' :
+                null;
+            const intensityModifier =
+                (systemPromptText.includes('הפחת עצימות') || systemPromptText.includes('קל יותר') || systemPromptText.includes('עצימות נמוכה')) ? 0.8 :
+                (systemPromptText.includes('הגבר עצימות') || systemPromptText.includes('כבד יותר') || systemPromptText.includes('יותר קשה')) ? 1.2 :
+                1.0;
+
             let duration, workoutsPerWeek;
 
             if (isMuscleBuilding) {
@@ -342,11 +356,12 @@
 
                     } else {
                         if (day % 2 === 1) {
-                            const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || []);
+                            const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, muscleGroups, workoutDuration, userData.availableEquipment || []);
                             const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
                             workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null };
                         } else {
-                            workout = { day, type: 'אירובי', exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier, cardioTarget, week, workoutDuration), completed: false, feedback: null, difficulty: null };
+                            const cardioWorkoutType = forcedCardioType || 'אירובי';
+                            workout = { day, type: cardioWorkoutType, exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, cardioTarget, week, workoutDuration, 12, { name: 'בסיס', key: 'base' }, 0, forcedCardioType), completed: false, feedback: null, difficulty: null };
                         }
                     }
 
@@ -1060,7 +1075,7 @@
             return runMinutes / avgPaceMin;
         };
 
-        const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
+        const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0, forcedCardioType = null) => {
             // Always route to running when aerobic goal is selected
             const isRunningProgram = goals.includes('שיפור יכולת אירובית');
 
@@ -1080,7 +1095,7 @@
             }
 
             const cardioOptions = ['ריצה', 'אופניים', 'שחייה', 'קפיצות חבל', 'אליפטיקל'];
-            let selectedCardio = cardioOptions[Math.floor(Math.random() * cardioOptions.length)];
+            let selectedCardio = forcedCardioType || cardioOptions[Math.floor(Math.random() * cardioOptions.length)];
             let notes = goals.includes('ירידה במשקל') 
                 ? 'שמור על קצב קבוע, דופק 60-70% מהמקסימום'
                 : 'התמקד בסיבולת, דופק 70-80% מהמקסימום';
