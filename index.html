@@ -262,9 +262,9 @@
             const weeks = [];
 
             for (let week = 1; week <= duration; week++) {
+                const phase = getPhase(week, duration);
                 const weekPlan = { weekNumber: week, workouts: [], phase: phase.name };
                 const intensityMultiplier = 1 + (Math.floor((week - 1) / 2) * 0.1);
-                const phase = getPhase(week, duration);
                 const runningDuration = getRunningDuration(enrichedCardioTarget.runningLevel, week, duration);
 
                 for (let day = 1; day <= workoutsPerWeek; day++) {
