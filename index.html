@@ -238,9 +238,8 @@
                 else if (rg === '5k')            duration = 12;
                 else                             duration = 12; // general fitness
 
-                if      (activityLevel === 'מתחיל') workoutsPerWeek = 3;
-                else if (activityLevel === 'בינוני') workoutsPerWeek = 4;
-                else                                 workoutsPerWeek = 5;
+                const defaultAerobicWorkouts = activityLevel === 'מתחיל' ? 3 : activityLevel === 'בינוני' ? 4 : 5;
+                workoutsPerWeek = parseInt(weeklyWorkouts) || defaultAerobicWorkouts;
             } else {
                 duration = goals.includes('ירידה במשקל') ? 6 : 4;
                 if      (activityLevel === 'מתחיל') workoutsPerWeek = 3;
@@ -273,6 +272,7 @@
                 const intensityMultiplier = 1 + (Math.floor((week - 1) / 2) * 0.1);
                 const runningDuration = getRunningDuration(enrichedCardioTarget.runningLevel, week, duration);
 
+                let runningSessionIdx = 0;
                 for (let day = 1; day <= workoutsPerWeek; day++) {
                     let workout;
 
@@ -295,7 +295,7 @@
 
                         if (isStrengthDay && isShortStrength) {
                             // Running + short runner strength appended
-                            const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase);
+                            const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
                             const strengthExercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '15');
                             workout = {
                                 day, type: 'ריצה + חיזוק',
@@ -310,7 +310,7 @@
                             const exercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '40');
                             workout = { day, type: 'כוח לרצים', exercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
                         } else {
-                            const exercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase);
+                            const exercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
                             workout = { day, type: 'ריצה', exercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
                         }
 
@@ -995,12 +995,12 @@
             return exercises.slice(0, maxExercises);
         };
 
-        const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }) => {
+        const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
             // Always route to running when aerobic goal is selected
             const isRunningProgram = goals.includes('שיפור יכולת אירובית');
 
             if (isRunningProgram) {
-                return generateRunningWorkout(cardioTarget, week, workoutDuration, goals, totalWeeks, phase);
+                return generateRunningWorkout(cardioTarget, week, workoutDuration, goals, totalWeeks, phase, runningSessionIdx);
             }
             
             // General cardio workout (non-running focused)
@@ -1051,7 +1051,7 @@
         // 5. עבודה עם הגוף (Work with the body) - listen, adapt, respect recovery
         // 6. פרטלק > אינטרוולים - creative fartlek preferred over rigid track intervals
         // 7. בסיס אירובי (Aerobic base) - foundation before quality, Lydiard method
-        const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }) => {
+        const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
             const { runningLevel, raceGoal, current5kTime, current10kTime } = cardioTarget;
             const duration = parseInt(workoutDuration);
 
@@ -1072,7 +1072,7 @@
                 return generateWalkToRunWorkout(week, duration);
             }
 
-            return generateAdvancedRunningWorkout(weekInCycle, duration, runningLevel || 'intermediate', raceGoal || 'general', week, paceZones, phase, totalWeeks);
+            return generateAdvancedRunningWorkout(weekInCycle, duration, runningLevel || 'intermediate', raceGoal || 'general', week, paceZones, phase, totalWeeks, runningSessionIdx);
         };
 
         // Running Warmup Protocol (based on Ohio State / uploaded document)
@@ -1134,8 +1134,14 @@
         // Based on Nachshon Shochat + Lydiard periodization
         // 4-week cycle: Long Run → Easy+Strides → Fartlek → Tempo/Progression/Test
         // Phase-aware: base = more easy, build = fartlek, peak = tempo+intervals, taper = short
-        const generateAdvancedRunningWorkout = (weekInCycle, duration, level, raceGoal, week, paceZones, phase = { key: 'base' }, totalWeeks = 12) => {
+        const generateAdvancedRunningWorkout = (weekInCycle, duration, level, raceGoal, week, paceZones, phase = { key: 'base' }, totalWeeks = 12, runningSessionIdx = 0) => {
             const phaseKey = phase ? phase.key : 'base';
+
+            // Secondary runs in the week → easy recovery (physiologically correct: 1 quality + easy runs)
+            if (runningSessionIdx > 0) {
+                const easyDuration = Math.round(duration * 0.85);
+                return generateEasyRunWithStrides(easyDuration, level);
+            }
 
             // Every 8th week: 5K time trial
             const is5KTestWeek = (week % 8 === 0);
@@ -2168,6 +2174,25 @@
                                                     placeholder="למשל: כאבי ברכיים, פלנטר פשיאטיס בעבר, וכו'"
                                                     className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                                 />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                    כמה אימונים בשבוע תרצה לבצע?
+                                                </label>
+                                                <select
+                                                    name="weeklyWorkouts"
+                                                    value={formData.weeklyWorkouts || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                >
+                                                    <option value="">בחר (ברירת מחדל לפי רמה)</option>
+                                                    <option value="2">2 אימונים בשבוע</option>
+                                                    <option value="3">3 אימונים בשבוע</option>
+                                                    <option value="4">4 אימונים בשבוע</option>
+                                                    <option value="5">5 אימונים בשבוע</option>
+                                                    <option value="6">6 אימונים בשבוע</option>
+                                                </select>
                                             </div>
                                         </div>
                                     </div>
