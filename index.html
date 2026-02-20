@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מערכת ניהול אימונים - מאמן</title>
+    <title>מערכת ניהול אימונים - מאמן v2.1</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -334,7 +337,8 @@
                 weeks,
                 createdAt: new Date().toISOString(),
                 muscleGroups: muscleGroups || [],
-                cardioTarget: enrichedCardioTarget
+                cardioTarget: enrichedCardioTarget,
+                _debug: { goals, isMuscleBuilding, hasAerobicGoal, raceGoal: enrichedCardioTarget.raceGoal, runningLevel: enrichedCardioTarget.runningLevel }
             };
         };
 
@@ -2287,6 +2291,11 @@
                                         תוכנית ל-{workoutPlan.duration} שבועות | {workoutPlan.workoutsPerWeek} אימונים בשבוע
                                     </p>
                                 </div>
+                            </div>
+
+                            {/* DEBUG BANNER - remove after diagnosis */}
+                            <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-3 mb-4 text-xs font-mono" dir="ltr">
+                                <strong>DEBUG v2.1</strong> | goals: [{workoutPlan._debug && workoutPlan._debug.goals.join(', ')}] | isMuscle: {String(workoutPlan._debug && workoutPlan._debug.isMuscleBuilding)} | isAerobic: {String(workoutPlan._debug && workoutPlan._debug.hasAerobicGoal)} | raceGoal: {workoutPlan._debug && workoutPlan._debug.raceGoal} | duration: {workoutPlan.duration}w
                             </div>
 
                             {/* Trainee Summary */}
