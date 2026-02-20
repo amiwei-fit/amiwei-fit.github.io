@@ -233,7 +233,8 @@
                     
                     if (isMuscleBuilding) {
                         // Only strength training for muscle building
-                        const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || []);
+                        const sessionNum = (week - 1) * workoutsPerWeek + day;
+                        const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '');
                         const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
                         
                         workout = {
@@ -376,25 +377,25 @@
             };
         };
 
-        const generateStrengthWorkout = (goals, level, multiplier, muscleGroups = [], workoutDuration = 60, availableEquipment = []) => {
+        const generateStrengthWorkout = (goals, level, multiplier, muscleGroups = [], workoutDuration = 60, availableEquipment = [], weekNum = 1, sessionNum = 1, strengthExperience = '') => {
             let exercises = [];
-            
+
             // Check if this is for a runner (aerobic goal)
             const isRunner = goals.includes('שיפור יכולת אירובית');
-            
+
             if (isRunner) {
                 // Runner-specific strength training - focus on injury prevention and running economy
                 exercises = generateRunnerStrengthWorkout(level, availableEquipment, workoutDuration);
                 return exercises;
             }
-            
+
             // Strength training for muscle building
             const isMuscleBuilding = goals.includes('עלייה במסת שריר');
-            
+
             if (isMuscleBuilding) {
-                return generateMuscleBuildingWorkout(muscleGroups, level, workoutDuration, availableEquipment);
+                return generateMuscleBuildingWorkout(muscleGroups, level, workoutDuration, availableEquipment, sessionNum, strengthExperience);
             }
-            
+
             // Default general fitness workout
             return generateGeneralStrengthWorkout(level, workoutDuration, availableEquipment);
         };
@@ -437,8 +438,122 @@
             return exercises.slice(0, maxExercises);
         };
 
+        // ==================================================================================
+        // FBW Beginner Workout - based on training methodology documents
+        // Principles: large → small muscles, technical first, progressive sets,
+        // 10-15 reps, 60-90 sec rest, NO training to failure
+        // Session 1: 1 set | Sessions 2-4: 2 sets | Session 5+: 3 sets
+        // ==================================================================================
+        const generateFBWBeginnerWorkout = (availableEquipment, sessionNum, workoutDuration) => {
+            const hasGym = availableEquipment.includes('חדר כושר מלא');
+            const hasDumbbells = availableEquipment.includes('משקולות חופשיות (דמבלים/קטלבלים)') || hasGym;
+            const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
+            const hasPullupBar = availableEquipment.includes('מתח, מקבילים');
+
+            // Progressive set loading per training documents
+            const setsPerExercise = sessionNum === 1 ? 1 : sessionNum <= 4 ? 2 : 3;
+            const progressionNote = sessionNum === 1
+                ? '⚠️ אימון ראשון - סט אחד בלבד! אל תגיע לכישלון'
+                : sessionNum <= 4
+                    ? '📈 סט בודד עד שתרגיש טוב - 2 סטים בסה"כ'
+                    : '💪 3 סטים לכל תרגיל - עדיין לא להגיע לכישלון!';
+
+            let exercises;
+
+            if (hasGym || hasDumbbells) {
+                // Gym / dumbbells beginner FBW
+                // Order: Legs → Back → Chest → Shoulders → Biceps → Triceps → Abs → Back Extension
+                exercises = [
+                    // 1. LEGS - large + technical first (Squat)
+                    {
+                        name: hasGym ? 'סקוואט במוט / לחיצת רגליים במכונה' : 'סקוואט עם משקוליות יד',
+                        sets: setsPerExercise, reps: '10-15', rest: 90,
+                        notes: `רגליים - קבוצת שריר גדולה, ראשון באימון. ${progressionNote}. מהגדול לקטן.`
+                    },
+                    {
+                        name: 'כפיפת ברכיים במכונה / Hamstring Curl',
+                        sets: setsPerExercise, reps: '10-15', rest: 60,
+                        notes: 'רגליים - שרשרת אחורית. המסטרינג.'
+                    },
+                    // 2. CHEST
+                    {
+                        name: hasDumbbells ? 'לחיצת חזה בשכיבה עם משקוליות יד' : (hasGym ? 'לחיצת חזה בשכיבה במכונה' : 'שכיבות סמיכה'),
+                        sets: setsPerExercise, reps: '10-15', rest: 90,
+                        notes: 'חזה, כתפיים, טריצפס - שריר גדול לפני כתפיים וזרועות.'
+                    },
+                    // 3. BACK
+                    {
+                        name: hasGym ? 'משיכת פולי עליון באחיזה צרה לפנים' : (hasPullupBar ? 'חתירה אוסטרלית / עליות מתח' : 'חתירה בישיבה עם גומיה'),
+                        sets: setsPerExercise, reps: '10-15', rest: 90,
+                        notes: 'גב רחב + ביצפס. משיכה לשפת הגוף, מרפקים לצד.'
+                    },
+                    // 4. SHOULDERS
+                    {
+                        name: hasDumbbells ? 'לחיצת כתפיים בישיבה עם משקוליות יד' : (hasGym ? 'לחיצת כתפיים במכונה' : 'שכיבות סמיכה V-shape (Pike Push-ups)'),
+                        sets: setsPerExercise, reps: '10-15', rest: 90,
+                        notes: 'כתפיים - לאחר גב וחזה.'
+                    },
+                    // 5. BICEPS
+                    {
+                        name: hasDumbbells ? 'כפיפת מרפקים בישיבה עם משקוליות יד' : (hasGym ? 'כפיפת מרפקים בפולי תחתון' : 'כפיפת מרפקים עם גומיה'),
+                        sets: setsPerExercise, reps: '10-15', rest: 60,
+                        notes: 'ביצפס - זרועות קדמיות. ללא תנופה.'
+                    },
+                    // 6. TRICEPS
+                    {
+                        name: hasGym ? 'פשיטת מרפקים בעמידה בפולי עליון' : (hasDumbbells ? 'פשיטת מרפקים מעל הראש עם משקולת' : 'שכיבות סמיכה צמודות (Diamond Push-ups)'),
+                        sets: setsPerExercise, reps: '10-15', rest: 60,
+                        notes: 'טריצפס - זרועות אחוריות.'
+                    },
+                    // 7. ABS
+                    {
+                        name: 'כפיפות בטן על מזרן',
+                        sets: setsPerExercise, reps: '10-15', rest: 60,
+                        notes: 'בטן - לאחר שרירי הגוף הגדולים.'
+                    },
+                    // 8. BACK EXTENSION / ERECTOR SPINAE
+                    {
+                        name: hasGym ? 'פשיטת גו בכיסא רומי (Back Extension)' : 'סופרמן - פשיטת גו על מזרן',
+                        sets: setsPerExercise, reps: '10-15', rest: 60,
+                        notes: 'זוקפי עמוד שדרה - גב תחתון. מחיזוק האחורי של הגוף.'
+                    }
+                ];
+            } else if (hasTRX) {
+                // TRX beginner FBW
+                exercises = [
+                    { name: 'TRX סקוואט (Squat)', sets: setsPerExercise, reps: '10-15', rest: 90, notes: `רגליים. ${progressionNote}` },
+                    { name: 'TRX חתירה (Rows) - פנים לרצועות', sets: setsPerExercise, reps: '10-15', rest: 90, notes: 'גב. פנים לרצועות.' },
+                    { name: 'TRX לחיצת חזה (Chest Press) - גב לרצועות', sets: setsPerExercise, reps: '10-15', rest: 90, notes: 'חזה.' },
+                    { name: 'TRX Fly (T, W, I) - פנים לרצועות', sets: setsPerExercise, reps: '10-15', rest: 60, notes: 'כתפיים וגב עליון.' },
+                    { name: 'TRX לאנג\'ים', sets: setsPerExercise, reps: '10 לכל רגל', rest: 60, notes: 'רגליים ושיווי משקל.' },
+                    { name: 'TRX פלאנק / בטן', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'ליבה ובטן.' }
+                ];
+            } else {
+                // Pure bodyweight beginner FBW (calisthenics based on XLSX document)
+                exercises = [
+                    { name: 'סקוואט (Squat)', sets: setsPerExercise, reps: '10-15', rest: 90, notes: `רגליים קדמיות. ${progressionNote}` },
+                    { name: 'שכיבות סמיכה ברוחב כתפיים (Push-ups)', sets: setsPerExercise, reps: '10-15', rest: 90, notes: 'חזה, כתפיים, טריצפס.' },
+                    { name: 'סופרמן - עלייה, שחייה, ירידה', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'גב תחתון, גלוטס.' },
+                    { name: 'לאנג\'ים (Lunges)', sets: setsPerExercise, reps: '10 לכל רגל', rest: 60, notes: 'רגליים ושיווי משקל.' },
+                    { name: 'פלאנק (Plank)', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'ליבה.' },
+                    { name: 'שכיבות סמיכה V-shape (Pike Push-ups)', sets: setsPerExercise, reps: '10-12', rest: 60, notes: 'כתפיים.' },
+                    { name: 'כפיפות בטן על מזרן', sets: setsPerExercise, reps: '15-20', rest: 45, notes: 'בטן.' }
+                ];
+            }
+
+            // Limit by workout duration (~7 min/exercise including rest)
+            const maxExercises = Math.max(6, Math.floor(parseInt(workoutDuration) / 7));
+            return exercises.slice(0, maxExercises);
+        };
+
         // Professional muscle building workout based on equipment and muscle groups
-        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment) => {
+        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '') => {
+            // Beginners (by level OR experience): always use FBW with progressive sets
+            const isBeginnerLevel = strengthExperience === 'beginner' || level === 'מתחיל';
+            if (isBeginnerLevel) {
+                return generateFBWBeginnerWorkout(availableEquipment, sessionNum, workoutDuration);
+            }
+
             const hasGym = availableEquipment.includes('חדר כושר מלא');
             const hasDumbbells = availableEquipment.includes('משקולות חופשיות (דמבלים/קטלבלים)') || hasGym;
             const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
@@ -619,36 +734,127 @@
                 }
             };
             
+            // Intermediate/advanced sets: 4 for large muscles, 3 for small (per training principles)
+            const setsLarge = level === 'מתקדם' || strengthExperience === 'advanced' ? 4 : 4;
+            const setsSmall = level === 'מתקדם' || strengthExperience === 'advanced' ? 4 : 3;
+
             // Build workout based on selected muscle groups
             if (muscleGroups.includes('Full Body')) {
-                // Full body routine - compound movements
+                // Full body routine - rotates exercises every session (based on XLSX variations)
+                // This ensures variety across the 4-week program
+                const variationIndex = (sessionNum - 1) % 3; // 3 variations cycle
+
                 if (hasGym) {
-                    exercises = [
-                        { name: 'סקוואט עם מוט (Barbell Back Squat)', sets: 4, reps: '8-10', rest: 120, notes: 'תרגיל מורכב - רגליים וליבה' },
-                        { name: 'בשכיבה לחיצת חזה עם מוט', sets: 4, reps: '8-10', rest: 120, notes: 'חזה, כתפיים, טריצפס' },
-                        { name: 'דד-ליפט', sets: 4, reps: '6-8', rest: 150, notes: 'כל הגוף - מלך התרגילים' },
-                        { name: 'משיכת מוט לסנטר (Pull-ups)', sets: 4, reps: '8-10', rest: 90, notes: 'גב וביצפס' },
-                        { name: 'בעמידה לחיצת כתפיים עם מוט', sets: 3, reps: '10-12', rest: 90, notes: 'כתפיים וליבה' },
-                        { name: 'פלאנק', sets: 3, duration: '60 שניות', rest: 60, notes: 'ליבה' }
+                    // 3 gym workout variations based on XLSX (סדרה 1-6 → condensed into 3)
+                    const gymVariations = [
+                        // Variation A: Classic compound movements
+                        [
+                            { name: 'סקוואט עם מוט (Barbell Back Squat)', sets: setsLarge, reps: '8-10', rest: 120, notes: 'תרגיל טכני ראשון. מהגדול לקטן.' },
+                            { name: 'לחיצת רגליים במכונה (Leg Press)', sets: setsLarge, reps: '12-15', rest: 90, notes: 'רגליים - quad.' },
+                            { name: 'כפיפת ברכיים במכונה', sets: setsSmall, reps: '12-15', rest: 60, notes: 'המסטרינג.' },
+                            { name: 'לחיצת חזה בשכיבה עם מוט (Bench Press)', sets: setsLarge, reps: '8-10', rest: 120, notes: 'חזה, כתפיים, טריצפס.' },
+                            { name: 'משיכת פולי עליון באחיזה רחבה לפנים', sets: setsLarge, reps: '10-12', rest: 90, notes: 'גב רחב.' },
+                            { name: 'לחיצת כתפיים עם משקוליות יד', sets: setsSmall, reps: '10-12', rest: 90, notes: 'כתפיים.' },
+                            { name: 'כפיפת מרפקים עם משקוליות יד', sets: setsSmall, reps: '10-12', rest: 60, notes: 'ביצפס.' },
+                            { name: 'פשיטת מרפקים בפולי עליון', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס.' },
+                            { name: 'פלאנק', sets: 3, duration: '45-60 שניות', rest: 60, notes: 'ליבה.' }
+                        ],
+                        // Variation B: Machine + free weight mix
+                        [
+                            { name: 'סקוואט עם מוט + Deadlift עם מוט', sets: setsLarge, reps: '8', rest: 120, notes: 'תרגילים טכניים ראשון. שרשרת קדמית + אחורית.' },
+                            { name: 'כפיפת ברכיים במכונה', sets: setsSmall, reps: '12-15', rest: 60, notes: 'המסטרינג.' },
+                            { name: 'לחיצת חזה בשכיבה עם משקוליות יד', sets: setsLarge, reps: '10-12', rest: 90, notes: 'חזה.' },
+                            { name: 'משיכת פולי עליון באחיזה צרה לפנים', sets: setsLarge, reps: '10-12', rest: 90, notes: 'גב וביצפס.' },
+                            { name: 'הרחקת כתפיים עם משקוליות יד (Lateral Raise)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'כתפיים - ראש לטרלי.' },
+                            { name: 'חתירה בישיבה בהטיית גו עם משקולת יד', sets: setsSmall, reps: '10-12 לכל צד', rest: 60, notes: 'גב.' },
+                            { name: 'כפיפת מרפקים עם מוט W', sets: setsSmall, reps: '10-12', rest: 60, notes: 'ביצפס.' },
+                            { name: 'פשיטת מרפקים בשכיבה (Skull Crushers)', sets: setsSmall, reps: '10-12', rest: 60, notes: 'טריצפס.' },
+                            { name: 'עליות בטן / כפיפות בטן אלכסוניים', sets: 3, reps: '15-20', rest: 45, notes: 'בטן ואלכסוניים.' }
+                        ],
+                        // Variation C: Functional compound movements
+                        [
+                            { name: 'Deadlift (דד-ליפט)', sets: setsLarge, reps: '6-8', rest: 150, notes: 'תרגיל מלכותי. כל הגוף, שרשרת אחורית.' },
+                            { name: 'לאנג\'ים עם מוט / משקוליות', sets: setsLarge, reps: '10-12 לכל רגל', rest: 90, notes: 'רגליים, שיווי משקל.' },
+                            { name: 'פשיטת ברכיים במכונה', sets: setsSmall, reps: '12-15', rest: 60, notes: 'quad.' },
+                            { name: 'לחיצת חזה בשכיבה משופעת (Incline Bench)', sets: setsLarge, reps: '10-12', rest: 90, notes: 'חזה עליון.' },
+                            { name: 'חתירה במכונה / חתירה בפולי תחתון', sets: setsLarge, reps: '10-12', rest: 90, notes: 'גב אמצעי.' },
+                            { name: 'לחיצת כתפיים במכונה (Machine Press)', sets: setsSmall, reps: '10-12', rest: 90, notes: 'כתפיים.' },
+                            { name: 'כפיפת מרפקים עם פולי תחתון', sets: setsSmall, reps: '12-15', rest: 60, notes: 'ביצפס.' },
+                            { name: 'פשיטת מרפקים מעל הראש עם משקולת', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס - ראש ארוך מאורך.' },
+                            { name: 'פלאנק צידי', sets: 3, duration: '30 שניות לכל צד', rest: 45, notes: 'ליבה צדדי.' }
+                        ]
                     ];
+                    exercises = gymVariations[variationIndex];
                 } else if (hasDumbbells) {
-                    exercises = [
-                        { name: 'גובלט סקוואט', sets: 4, reps: '12-15', rest: 90, notes: 'רגליים וליבה' },
-                        { name: 'בשכיבה לחיצת חזה עם דמבלים', sets: 4, reps: '10-12', rest: 90, notes: 'חזה' },
-                        { name: 'דד-ליפט עם דמבלים', sets: 4, reps: '10-12', rest: 120, notes: 'שרשרת אחורית' },
-                        { name: 'חתירת דמבל חד-צדדי', sets: 4, reps: '10-12 לכל צד', rest: 90, notes: 'גב' },
-                        { name: 'בישיבה לחיצת כתפיים עם דמבלים', sets: 3, reps: '10-12', rest: 90, notes: 'כתפיים' },
-                        { name: 'לאנג\'ים', sets: 3, reps: '12 לכל רגל', rest: 60, notes: 'רגליים' }
+                    const dumbVariations = [
+                        [
+                            { name: 'גובלט סקוואט (Goblet Squat)', sets: setsLarge, reps: '12-15', rest: 90, notes: 'רגליים וליבה.' },
+                            { name: 'Deadlift עם משקוליות יד', sets: setsLarge, reps: '10-12', rest: 90, notes: 'שרשרת אחורית.' },
+                            { name: 'לחיצת חזה בשכיבה עם משקוליות יד', sets: setsLarge, reps: '10-12', rest: 90, notes: 'חזה.' },
+                            { name: 'חתירה בהטיית גו עם משקולת יד', sets: setsLarge, reps: '10-12 לכל צד', rest: 90, notes: 'גב.' },
+                            { name: 'לחיצת כתפיים בישיבה עם משקוליות', sets: setsSmall, reps: '10-12', rest: 90, notes: 'כתפיים.' },
+                            { name: 'כפיפת מרפקים לסירוגין', sets: setsSmall, reps: '10-12', rest: 60, notes: 'ביצפס.' },
+                            { name: 'פשיטת מרפקים מעל הראש', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס.' },
+                            { name: 'פלאנק + פלאנק צידי', sets: 3, duration: '45 שניות', rest: 60, notes: 'ליבה.' }
+                        ],
+                        [
+                            { name: 'לאנג\'ים הליכה עם משקוליות', sets: setsLarge, reps: '12 לכל רגל', rest: 90, notes: 'רגליים דינמי.' },
+                            { name: 'בולגריאן ספליט סקוואט', sets: setsLarge, reps: '10 לכל רגל', rest: 90, notes: 'רגליים חד-צדדי.' },
+                            { name: 'שכיבה בשיפוע חיובי לחיצת חזה עם משקוליות', sets: setsLarge, reps: '10-12', rest: 90, notes: 'חזה עליון.' },
+                            { name: 'פרפר (Flys) בשכיבה עם משקוליות', sets: setsSmall, reps: '12-15', rest: 60, notes: 'חזה - בידוד.' },
+                            { name: 'חתירה בשכיבה עם משקוליות', sets: setsLarge, reps: '10-12', rest: 90, notes: 'גב.' },
+                            { name: 'הרחקה אחורית (Rear Delt Fly)', sets: setsSmall, reps: '15', rest: 60, notes: 'כתפיים אחוריות.' },
+                            { name: 'פטיש (Hammer Curls)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'ביצפס + ברכיורדיאליס.' },
+                            { name: 'קיקבקס (Kickbacks)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס.' }
+                        ],
+                        [
+                            { name: 'סקוואט מול עם משקוליות + Deadlift', sets: setsLarge, reps: '8-10', rest: 120, notes: 'שרשרת קדמית + אחורית.' },
+                            { name: 'Step-Up (עליות מדרגה)', sets: setsLarge, reps: '12 לכל רגל', rest: 60, notes: 'רגליים חד-צדדי.' },
+                            { name: 'לחיצת חזה עם מוט W', sets: setsLarge, reps: '8-10', rest: 90, notes: 'חזה.' },
+                            { name: 'פולאובר עם משקולת (Pullover)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'חזה + גב.' },
+                            { name: 'Renegade Row', sets: setsLarge, reps: '8 לכל צד', rest: 90, notes: 'גב + ליבה.' },
+                            { name: 'הרחקה לצד (Lateral Raise)', sets: setsSmall, reps: '15', rest: 45, notes: 'כתפיים לטרליות.' },
+                            { name: 'כפיפת מרפקים בשיפוע (Incline Curls)', sets: setsSmall, reps: '10-12', rest: 60, notes: 'ביצפס מאורך.' },
+                            { name: 'שכיבות סמיכה צמודות (Diamond Push-ups)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס.' },
+                            { name: 'Dead Bugs', sets: 3, reps: '12 לכל צד', rest: 45, notes: 'ליבה + קואורדינציה.' }
+                        ]
                     ];
+                    exercises = dumbVariations[variationIndex];
                 } else {
-                    exercises = [
-                        { name: 'סקוואט עמוק', sets: 4, reps: '20-25', rest: 60, notes: 'רגליים' },
-                        { name: 'שכיבות סמיכה', sets: 4, reps: '15-20', rest: 60, notes: 'חזה וטריצפס' },
-                        { name: 'משיכות במתח (או חתירה אוסטרלית)', sets: 4, reps: 'מקסימום', rest: 90, notes: 'גב' },
-                        { name: 'שכיבות תמיכה (Pike Push-ups)', sets: 3, reps: '12-15', rest: 60, notes: 'כתפיים' },
-                        { name: 'לאנג\'ים הליכה', sets: 4, reps: '15 לכל רגל', rest: 60, notes: 'רגליים' },
-                        { name: 'פלאנק', sets: 3, duration: '60 שניות', rest: 60, notes: 'ליבה' }
+                    // Calisthenics / bodyweight - based on XLSX (full body bodyweight XLSX)
+                    const bwVariations = [
+                        // Beginner-Intermediate bodyweight
+                        [
+                            { name: 'סקוואט (Squat)', sets: setsLarge, reps: '15-20', rest: 60, notes: 'רגליים קדמיות.' },
+                            { name: 'שכיבות סמיכה רגולריות', sets: setsLarge, reps: '10-15', rest: 60, notes: 'חזה, כתף, טריצפס.' },
+                            { name: 'סופרמן - עלייה, שחייה, ירידה', sets: 3, duration: '30 שניות', rest: 60, notes: 'גב תחתון, גלוטס.' },
+                            { name: 'פלאנק', sets: 3, duration: '45-60 שניות', rest: 60, notes: 'ליבה.' },
+                            { name: 'לאנג\'ים', sets: setsLarge, reps: '12 לכל רגל', rest: 60, notes: 'רגליים.' },
+                            { name: 'שכיבות סמיכה V-shape', sets: setsSmall, reps: '10-12', rest: 60, notes: 'כתפיים.' },
+                            { name: 'כפיפות בטן + אלכסוניים', sets: 3, reps: '15-20', rest: 45, notes: 'בטן.' }
+                        ],
+                        // Intermediate bodyweight
+                        [
+                            { name: 'Pistol Squat (חד-רגלי) - עם עזרה', sets: setsLarge, reps: '8 לכל רגל', rest: 90, notes: 'רגל חד-צדדית.' },
+                            { name: 'שכיבות סמיכה רחבות', sets: setsLarge, reps: '10-15', rest: 60, notes: 'חזה.' },
+                            { name: 'חתירה אוסטרלית (Australian Pull-ups)', sets: setsLarge, reps: '12-15', rest: 90, notes: 'גב.' },
+                            { name: 'עליות מתח (Pull-ups)', sets: setsLarge, reps: 'מקסימום', rest: 120, notes: 'גב וביצפס.' },
+                            { name: 'שכיבות סמיכה יהלום (Diamond Push-ups)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס.' },
+                            { name: 'פלאנק צידי', sets: 3, duration: '30-45 שניות לכל צד', rest: 45, notes: 'ליבה.' },
+                            { name: 'Jump Squats', sets: 3, reps: '12-15', rest: 90, notes: 'כוח נפיץ - רגליים.' }
+                        ],
+                        // Advanced bodyweight (calisthenics from XLSX)
+                        [
+                            { name: 'Pistol Squat מלא', sets: setsLarge, reps: '6-8 לכל רגל', rest: 120, notes: 'רגל מתקדם.' },
+                            { name: 'עליות מתח משיכה לא שווה', sets: setsLarge, reps: 'מקסימום', rest: 120, notes: 'גב - מתקדם.' },
+                            { name: 'שכיבות סמיכה לא שוות (Uneven Push-ups)', sets: setsLarge, reps: '8-10 לכל צד', rest: 90, notes: 'חזה מתקדם.' },
+                            { name: 'Dips מקבילים', sets: setsSmall, reps: '10-15', rest: 90, notes: 'חזה תחתון + טריצפס.' },
+                            { name: 'L-sit על הרצפה (החזקה)', sets: 3, duration: '20-30 שניות', rest: 60, notes: 'ליבה + טריצפס.' },
+                            { name: 'Pike Push-up Elevated', sets: setsSmall, reps: '10-12', rest: 90, notes: 'כתפיים מתקדם.' },
+                            { name: 'Sמוק-קום (Burpees)', sets: 3, reps: '10-12', rest: 90, notes: 'כל הגוף, קרדיו.' }
+                        ]
                     ];
+                    exercises = bwVariations[variationIndex];
                 }
             } else {
                 // Specific muscle groups
