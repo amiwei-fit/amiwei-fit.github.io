@@ -429,6 +429,29 @@
             };
         };
 
+        // Calculate personal pace zones from 10K time
+        // Easy pace = 10K pace + 90-120 sec/km; Tempo = 10K pace + 20-35 sec/km
+        const getPaceFrom10K = (time10k) => {
+            if (!time10k) return null;
+            const clean = time10k.replace(/[^0-9:]/g, '');
+            const parts = clean.split(':');
+            if (parts.length !== 2) return null;
+            const totalMin = parseFloat(parts[0]) + parseFloat(parts[1]) / 60;
+            if (isNaN(totalMin) || totalMin <= 0) return null;
+            const pacePerKm = totalMin / 10;
+            const fmt = (m) => {
+                const min = Math.floor(m);
+                const sec = Math.round((m - min) * 60);
+                return `${min}:${sec.toString().padStart(2, '0')}`;
+            };
+            return {
+                easy:   `${fmt(pacePerKm + 1.5)}-${fmt(pacePerKm + 2.0)}`,
+                medium: `${fmt(pacePerKm + 0.25)}-${fmt(pacePerKm + 0.5)}`,
+                fast:   `${fmt(pacePerKm - 0.2)}-${fmt(pacePerKm)}`,
+                r400:   fmt((pacePerKm - 0.25) * 0.4)
+            };
+        };
+
         // Runner-specific strength workout (based on כוח לרצים.xlsx + Beit Dror plans)
         // Focuses on: posterior chain, anterior chain, abductors/adductors, core
         const generateRunnerStrengthWorkout = (level, availableEquipment, workoutDuration) => {
@@ -995,6 +1018,22 @@
             return exercises.slice(0, maxExercises);
         };
 
+        // Calculate realistic running distance (km) from run time (min) and pace zones
+        // Used to show honest distances instead of hardcoded ranges
+        const calcRunDistKm = (runMinutes, paceZones, level) => {
+            let avgPaceMin;
+            if (paceZones && paceZones.easy) {
+                const segs = paceZones.easy.split('-').map(p => {
+                    const [m, s] = p.trim().split(':').map(Number);
+                    return m + (s || 0) / 60;
+                });
+                avgPaceMin = segs.length === 2 ? (segs[0] + segs[1]) / 2 : segs[0];
+            } else {
+                avgPaceMin = level === 'advanced' ? 5.25 : level === 'intermediate' ? 6.25 : 7.5;
+            }
+            return runMinutes / avgPaceMin;
+        };
+
         const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
             // Always route to running when aerobic goal is selected
             const isRunningProgram = goals.includes('שיפור יכולת אירובית');
@@ -1056,7 +1095,7 @@
             const duration = parseInt(workoutDuration);
 
             // Resolve personal pace zones from 5K (or 10K) time
-            const paceZones = getPaceFrom5K(current5kTime) || getPaceFrom5K(current10kTime) || null;
+            const paceZones = getPaceFrom5K(current5kTime) || getPaceFrom10K(current10kTime) || null;
 
             // BC Running 4-week cycle (Nachshon Shochat methodology):
             // Cycle: Long Run → Easy+Strides → Fartlek → Tempo/Progression/Test
@@ -1161,9 +1200,12 @@
                 return generateProgressionRun(taperDuration, level); // short progression
             }
 
+            // Long run gets 50-70% more time than the base easy run
+            const longRunDur = Math.round(duration * (level === 'advanced' ? 1.7 : 1.5));
+
             // Base phase: emphasize aerobic base, minimal quality
             if (phaseKey === 'base') {
-                if (weekInCycle === 1) return generateLongRun(duration, level, raceGoal);
+                if (weekInCycle === 1) return generateLongRun(longRunDur, level, raceGoal, paceZones);
                 if (weekInCycle === 2) return generateEasyRunWithStrides(duration, level);
                 if (weekInCycle === 3) return generateEasyRunWithStrides(duration, level); // extra easy in base
                 return generateProgressionRun(duration, level); // gentle quality
@@ -1171,7 +1213,7 @@
 
             // Build phase: introduce fartlek and tempo
             if (phaseKey === 'build') {
-                if (weekInCycle === 1) return generateLongRun(duration, level, raceGoal);
+                if (weekInCycle === 1) return generateLongRun(longRunDur, level, raceGoal, paceZones);
                 if (weekInCycle === 2) return generateEasyRunWithStrides(duration, level);
                 if (weekInCycle === 3) return generateFartlekWorkout(duration, level, week);
                 if (is5KTestWeek) return generate5KTestWorkout(duration, level);
@@ -1180,7 +1222,7 @@
 
             // Peak phase: full quality mix - all workout types
             // weekInCycle: 1=Long, 2=Easy+Strides, 3=Fartlek, 4=Tempo or Test
-            if (weekInCycle === 1) return generateLongRun(duration, level, raceGoal);
+            if (weekInCycle === 1) return generateLongRun(longRunDur, level, raceGoal, paceZones);
             if (weekInCycle === 2) return generateEasyRunWithStrides(duration, level);
             if (weekInCycle === 3) return generateFartlekWorkout(duration, level, week);
             if (is5KTestWeek) return generate5KTestWorkout(duration, level);
@@ -1189,17 +1231,23 @@
 
         // Long Run - BC Running methodology: aerobic base, "courage to slow down"
         // Nachshon Shochat: easy with gentle pickup in final third
-        // BC Running target: 25-26km or 2 hours; peak weeks 32-36km
         const generateLongRun = (duration, level, raceGoal, paceZones = null) => {
             const easyPace = paceZones ? `קצב קל: ${paceZones.easy} לק"מ` : 'קצב שיחה מלא (60-70% דופק מקסימום)';
-            const targetDist = level === 'advanced' ? '22-32 ק"מ' : '14-22 ק"מ';
+            // Running time = total duration minus ~10 min warmup walking/dynamic
+            const runTime = Math.max(20, duration - 10);
+            const t1 = Math.round(runTime * 0.33);
+            const t2 = Math.round(runTime * 0.34);
+            const t3 = runTime - t1 - t2;
+            // Calculate distance from actual pace, not hardcoded
+            const distKm = calcRunDistKm(runTime, paceZones, level);
+            const targetDist = `${Math.floor(distKm * 0.9)}-${Math.ceil(distKm * 1.1)} ק"מ`;
             return [{
                 name: 'ריצה ארוכה (Long Run) - עמוד התווך',
-                duration: `${duration} דקות`,
+                duration: `${duration} דקות (ריצה: ${runTime} דקות + חימום/צינון)`,
                 warmup: getRunningWarmup(),
-                structure: 'שליש ראשון: קל מאוד (Zone 1) | שליש שני: אירובי יציב (Zone 2) | שליש אחרון: הגברה מתונה בלבד',
+                structure: `${t1} דקות: קל מאוד (Zone 1 — קצב שיחה מלא) | ${t2} דקות: אירובי יציב (Zone 2) | ${t3} דקות: הגברה מתונה`,
                 pace: easyPace + ` | יעד מרחק: ${targetDist}`,
-                cooldown: '5-10 דקות הליכה + מתיחות סטטיות',
+                cooldown: '5-7 דקות הליכה + מתיחות סטטיות',
                 notes: level === 'advanced'
                     ? 'BC Running: הריצה הארוכה בונה את הבסיס האירובי - ה"בנק" של VO2max, שריפת שומן, סיבולת נפשית. לא ריצת מהירות. סיים בהרגשה שאפשר המשיך.'
                     : 'BC Running: "האומץ להאט" - כדי לרוץ מהר יותר, קודם ללמוד לרוץ לאט יותר. קצב שיחה מלא.',
