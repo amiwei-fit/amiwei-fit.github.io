@@ -201,6 +201,9 @@
         const generateWorkoutPlan = (userData) => {
             const { weight, height, age, gender, activityLevel, workoutDuration, goals, muscleGroups, cardioTarget, weeklyWorkouts } = userData;
 
+            // DEBUG - remove after diagnosis
+            console.log('🏋️ generateWorkoutPlan | goals:', JSON.stringify(goals), '| activityLevel:', activityLevel, '| runningLevel:', userData.runningLevel, '| raceGoal:', userData.raceGoal);
+
             // --- Fix: merge top-level running fields into cardioTarget ---
             // (runningLevel, raceGoal etc. are stored as top-level formData fields, not inside cardioTarget)
             const enrichedCardioTarget = {
