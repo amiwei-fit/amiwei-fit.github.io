@@ -1137,10 +1137,16 @@
         const generateAdvancedRunningWorkout = (weekInCycle, duration, level, raceGoal, week, paceZones, phase = { key: 'base' }, totalWeeks = 12, runningSessionIdx = 0) => {
             const phaseKey = phase ? phase.key : 'base';
 
-            // Secondary runs in the week → easy recovery (physiologically correct: 1 quality + easy runs)
-            if (runningSessionIdx > 0) {
-                const easyDuration = Math.round(duration * 0.85);
-                return generateEasyRunWithStrides(easyDuration, level);
+            // Secondary runs in the week → vary by session index:
+            // idx=1: easy recovery | idx=2: progression (secondary quality) | idx=3+: easy again
+            if (runningSessionIdx === 1) {
+                return generateEasyRunWithStrides(Math.round(duration * 0.85), level);
+            }
+            if (runningSessionIdx === 2) {
+                return generateProgressionRun(Math.round(duration * 0.90), level);
+            }
+            if (runningSessionIdx > 2) {
+                return generateEasyRunWithStrides(Math.round(duration * 0.80), level);
             }
 
             // Every 8th week: 5K time trial
@@ -1229,6 +1235,7 @@
             const fartlekVariations = [
                 {
                     name: 'פרטלק קצר - "משחק מהירות" (Short Fartlek)',
+                    duration: `${duration} דקות`,
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות של 80מ\' (חלק מהחימום לאימוני איכות - BC Running)',
                     main: level === 'advanced'
                         ? '10-12 × (60 שניות מהיר / 60 שניות ג\'וג קל) - עדיף בשטח טבעי, לא מסלול!'
@@ -1236,10 +1243,11 @@
                     cooldown: '10 דקות ריצה קלה + מתיחות',
                     notes: 'BC Running: "פרטלק = שחרור יצירתי ומהנה". ה"מהיר" = קצב 5K (מאתגר אך לא מקסימלי). ה"קל" = ג\'וג קל שמאפשר שיחה. שמור על קצב קבוע מהחזרה הראשונה לאחרונה.',
                     intensity: 'גבוהה - VO2max',
-                    tip: 'BC Running: אל תגיע למסלול! שטח טבעי, גבעות, שבילים - הם הזירה הטבעית של הפרטלק. עיקרון: "train, don\'t strain".'
+                    tips: 'BC Running: אל תגיע למסלול! שטח טבעי, גבעות, שבילים - הם הזירה הטבעית של הפרטלק. עיקרון: "train, don\'t strain".'
                 },
                 {
                     name: 'פרטלק בינוני - סף לקטט (Medium Fartlek)',
+                    duration: `${duration} דקות`,
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
                     main: level === 'advanced'
                         ? '6-8 × (3 דקות מהיר-בינוני / 3 דקות קל) - שנה כיוון, כלול גבעות, הפתע את עצמך'
@@ -1247,16 +1255,17 @@
                     cooldown: '10 דקות ריצה קלה + מתיחות',
                     notes: 'BC Running: ה"מהיר-בינוני" = קצב 10K-חצי מרתון (ניתן לשמירה לאורך 3 דקות בכל חזרה). זה אזור הסף הלקטי - ה"מנוע" שמשפר את הריצה לאורך זמן.',
                     intensity: 'בינונית-גבוהה - Lactate Threshold',
-                    tip: 'פרטלק = "משחק מהירות" שוודי. גמיש ומהנה. ניתן לשנות על פי תחושה ביום - זו חוזקתו.'
+                    tips: 'פרטלק = "משחק מהירות" שוודי. גמיש ומהנה. ניתן לשנות על פי תחושה ביום - זו חוזקתו.'
                 },
                 {
                     name: 'פרטלק פירמידה + ספרינטים (Pyramid Fartlek)',
+                    duration: `${duration} דקות`,
                     warmup: '15-20 דקות ריצה קלה + 4-5 מתגברות',
                     main: 'פירמידה: 2→4→6→4→2 דקות (מהיר), 2-3 דקות ג\'וג קל בין כל פרק. סיום: 4×30 שניות ספרינט (א-לקטי) / 60 שניות ג\'וג',
                     cooldown: '10 דקות ריצה קלה + מתיחות',
                     notes: 'BC Running: הפירמידה עובדת על כל טווחי הקצב. הקצב ב-2 דקות מהיר מב-6 דקות. הספרינטים הקצרים בסוף (≤30 שניות במאמץ מירבי) = אימון "א-לקטי" שמשפר מהירות טהורה לפי שיטת לידיארד.',
                     intensity: 'גבוהה-מאוד גבוהה',
-                    tip: 'BC Running: שמור את הספרינטים "בטנק". הם קצרים (עד 10-30 שניות) ומירביים. זו הדרך לשפר מהירות טהורה - לא חזרות 400מ\' ארוכות!'
+                    tips: 'BC Running: שמור את הספרינטים "בטנק". הם קצרים (עד 10-30 שניות) ומירביים. זו הדרך לשפר מהירות טהורה - לא חזרות 400מ\' ארוכות!'
                 }
             ];
 
