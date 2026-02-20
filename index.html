@@ -400,39 +400,103 @@
             return generateGeneralStrengthWorkout(level, workoutDuration, availableEquipment);
         };
 
-        // Runner-specific strength workout
+        // Running Pace Table (McMillan-based, from uploaded pace table document)
+        // Maps test time (2K/3K/4K) to training zones
+        const runningPaceTable = [
+            { test2k: '6:00',  test3k: '9:20',  test4k: '12:50', easy: '4:00-4:41', medium: '3:36-3:45', fast: '3:26-3:35', r400: '1:12-1:16' },
+            { test2k: '6:30',  test3k: '10:06', test4k: '13:51', easy: '4:15-4:58', medium: '3:49-3:59', fast: '3:38-3:48', r400: '1:17-1:21' },
+            { test2k: '7:00',  test3k: '10:53', test4k: '14:55', easy: '4:30-5:14', medium: '4:03-4:13', fast: '3:51-4:02', r400: '1:22-1:26' },
+            { test2k: '7:30',  test3k: '11:40', test4k: '15:58', easy: '4:45-5:31', medium: '4:16-4:27', fast: '4:04-4:15', r400: '1:27-1:31' },
+            { test2k: '8:00',  test3k: '12:26', test4k: '17:02', easy: '5:00-5:48', medium: '4:30-4:42', fast: '4:18-4:30', r400: '1:32-1:37' },
+            { test2k: '8:30',  test3k: '13:12', test4k: '18:05', easy: '5:15-6:06', medium: '4:44-4:56', fast: '4:31-4:43', r400: '1:38-1:43' },
+            { test2k: '9:00',  test3k: '13:59', test4k: '19:09', easy: '5:30-6:23', medium: '4:57-5:10', fast: '4:44-4:57', r400: '1:44-1:50' },
+            { test2k: '9:30',  test3k: '14:45', test4k: '20:12', easy: '5:44-6:40', medium: '5:11-5:25', fast: '4:58-5:12', r400: '1:51-1:56' },
+            { test2k: '10:00', test3k: '15:32', test4k: '21:16', easy: '5:59-6:57', medium: '5:25-5:40', fast: '5:12-5:27', r400: '1:57-2:03' },
+            { test2k: '10:30', test3k: '16:18', test4k: '22:20', easy: '6:13-7:14', medium: '5:38-5:54', fast: '5:25-5:41', r400: '2:04-2:10' },
+            { test2k: '11:00', test3k: '17:05', test4k: '23:23', easy: '6:28-7:31', medium: '5:52-6:08', fast: '5:39-5:56', r400: '2:11-2:17' },
+            { test2k: '11:30', test3k: '17:51', test4k: '24:27', easy: '6:43-7:49', medium: '6:06-6:23', fast: '5:53-6:10', r400: '2:18-2:24' },
+            { test2k: '12:00', test3k: '18:37', test4k: '25:30', easy: '6:57-8:06', medium: '6:20-6:38', fast: '6:07-6:25', r400: '2:25-2:31' },
+            { test2k: '12:30', test3k: '19:24', test4k: '26:34', easy: '7:12-8:23', medium: '6:34-6:52', fast: '6:21-6:40', r400: '2:32-2:38' },
+            { test2k: '13:00', test3k: '20:14', test4k: '27:38', easy: '7:26-8:40', medium: '6:48-7:07', fast: '6:35-6:54', r400: '2:39-2:46' }
+        ];
+
+        // Get pace zone based on test result
+        const getPaceFromTest = (test2kTime) => {
+            if (!test2kTime) return null;
+            const parts = test2kTime.split(':');
+            if (parts.length !== 2) return null;
+            const totalMin = parseFloat(parts[0]) + parseFloat(parts[1]) / 60;
+            // Find closest entry
+            let closest = runningPaceTable[0];
+            let minDiff = Infinity;
+            runningPaceTable.forEach(entry => {
+                const ep = entry.test2k.split(':');
+                const em = parseFloat(ep[0]) + parseFloat(ep[1]) / 60;
+                const diff = Math.abs(em - totalMin);
+                if (diff < minDiff) { minDiff = diff; closest = entry; }
+            });
+            return closest;
+        };
+
+        // Runner-specific strength workout (based on כוח לרצים.xlsx + Beit Dror plans)
+        // Focuses on: posterior chain, anterior chain, abductors/adductors, core
         const generateRunnerStrengthWorkout = (level, availableEquipment, workoutDuration) => {
+            const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
+            const hasGym = availableEquipment.includes('חדר כושר מלא');
+            const hasDumbbells = availableEquipment.includes('משקולות חופשיות (דמבלים/קטלבלים)') || hasGym;
+
+            // Core runner-strength exercises (from כוח לרצים.xlsx)
             const exercises = [
-                // שרשרת אחורית
-                { name: 'עליות תאומים (Calf Raises)', sets: 3, reps: '15-20', rest: 45, notes: 'מבודד לתאומים - חיזוק שוקיים למניעת פציעות' },
-                { name: 'הרמות אגן (Hip Extension)', sets: 3, reps: '15', rest: 60, notes: 'וריאציות: רגליים על הרצפה / כדור פיזיו' },
-                { name: 'Kick Back עם miniband', sets: 3, reps: '15 לכל רגל', rest: 45, notes: 'שרשרת אחורית - גלוטס והמסטרינג' },
-                { name: 'דד-ליפט חד-רגלי (Single Leg Deadlift)', sets: 3, reps: '10 לכל רגל', rest: 90, notes: 'חיזוק שרשרת אחורית + איזון' },
-                
-                // שרשרת קדמית
-                { name: 'סקוואט (וריאציות)', sets: 3, reps: '12-15', rest: 90, notes: 'משקל על הכתפיים / pistol squat / elevated single leg split squat' },
-                { name: 'לאנג\'ים', sets: 3, reps: '12 לכל רגל', rest: 60, notes: 'וריאציות: עם משקל / walking lunge / jump lunge' },
-                
-                // מרחיקים ומקרבים
-                { name: 'Lateral Step עם miniband', sets: 3, reps: '15 לכל צד', rest: 45, notes: 'מרחיקים - מניעת פציעות ברך' },
-                { name: 'Clamshell עם miniband', sets: 3, reps: '15 לכל צד', rest: 45, notes: 'מרחיקים - חיזוק גלוטס חיצוני' },
-                { name: 'Adduction עם miniband', sets: 3, reps: '15', rest: 45, notes: 'מקרבים - יציבות פנימית' },
-                
-                // ליבה
-                { name: 'פלאנק', sets: 3, duration: '45-60 שניות', rest: 60, notes: 'חיזוק ליבה - קריטי לריצה יעילה' },
-                { name: 'פלאנק צדדי', sets: 3, duration: '30 שניות לכל צד', rest: 45, notes: 'יציבות צדדית' },
-                { name: 'Crunches', sets: 3, reps: '20', rest: 45, notes: 'חיזוק בטן' },
-                
-                // חזה עליון
-                { name: 'שכיבות סמיכה', sets: 3, reps: '15-20', rest: 60, notes: 'חיזוק חזה וזרועות' }
+                // Posterior chain - critical for running economy
+                { name: 'עליות תאומים (Calf Raises) - ימין ושמאל', sets: 3, reps: '15-20', rest: 45,
+                  notes: 'סופר-סט: ימין → שמאל. מבודד לתאומים - מניעת פציעות שוק ואכילס.' },
+                { name: 'הרמות אגן (Hip Extension / Glute Bridge)', sets: 3, reps: '15', rest: 60,
+                  notes: hasDumbbells ? 'וריאציות: רגליים על הרצפה / כדור פיזיו / Hip Thrust עם משקולת' : 'וריאציות: רגליים על הרצפה / כדור פיזיו.' },
+                { name: 'Kick Back עם miniband', sets: 3, reps: '15 לכל רגל', rest: 45,
+                  notes: 'שרשרת אחורית - גלוטס מדיוס + המסטרינג. מניעת פציעות ברך.' },
+                { name: hasDumbbells ? 'דד-ליפט חד-רגלי עם משקולת (Single Leg Deadlift)' : 'דד-ליפט חד-רגלי (Single Leg Deadlift)',
+                  sets: 3, reps: '10 לכל רגל', rest: 90,
+                  notes: 'חיזוק שרשרת אחורית + שיווי משקל. קריטי לרצים!' },
+
+                // Anterior chain
+                { name: level === 'מתקדם' ? 'Pistol Squat / Single Leg Squat - ימין ושמאל' : 'סקוואט עם מוט / משקולות (Squat)',
+                  sets: 3, reps: '12-15', rest: 90,
+                  notes: 'שרשרת קדמית. וריאציות: משקל על כתפיים, Side Squat, elevated split squat.' },
+                { name: 'לאנג\'ים (Lunges)',
+                  sets: 3, reps: '12 לכל רגל', rest: 60,
+                  notes: 'וריאציות: עם משקל / Walking Lunge / Jump Lunge. מחקה את תנועת הריצה.' },
+
+                // Abductors/Adductors - crucial for knee stability
+                { name: 'Lateral Step עם miniband', sets: 3, reps: '15 לכל צד', rest: 45,
+                  notes: 'מרחיקים - מניעת פציעות ברך (IT Band). מעגל קל מסביב לברכיים.' },
+                { name: 'Clamshell עם miniband', sets: 3, reps: '15 לכל צד', rest: 45,
+                  notes: 'מרחיקים - חיזוק גלוטס חיצוני. שוכב על הצד, ברכיים כפופות.' },
+                { name: 'Adduction עם miniband / מכונה', sets: 3, reps: '15', rest: 45,
+                  notes: 'מקרבים - יציבות אגן פנימית.' },
+
+                // Core - essential for running posture
+                { name: 'פלאנק', sets: 3, duration: '45-60 שניות', rest: 60,
+                  notes: 'ליבה יציב = ריצה יעילה יותר. פלג גוף אחד ישר.' },
+                { name: 'פלאנק צידי', sets: 3, duration: '30 שניות לכל צד', rest: 45,
+                  notes: 'יציבות צדדית - מונע "נדנוד" בריצה.' },
+                { name: 'כפיפות בטן (Crunches)', sets: 3, reps: '20', rest: 45,
+                  notes: 'חיזוק בטן קדמי.' },
+
+                // Upper body for arm drive
+                { name: hasTRX ? 'TRX שכיבות סמיכה + TRX חתירה' : 'שכיבות סמיכה + בטן סטטי (Plank Hold)',
+                  sets: 3, reps: '15-20', rest: 60,
+                  notes: 'חיזוק חזה, כתפיים, גב עליון - שיפור תנועת הזרועות בריצה.' }
             ];
-            
+
             if (level === 'מתקדם') {
                 exercises.push(
-                    { name: 'בוקס סטפ-אפ', sets: 3, reps: '10 לכל רגל', rest: 60, notes: 'מחזק את כוח הדחיפה בריצה' }
+                    { name: 'Step-Up על ספסל / קופסה', sets: 3, reps: '10 לכל רגל', rest: 60,
+                      notes: 'מחזק כוח דחיפה ומניעת פציעות. דינמי ופונקציונלי.' },
+                    { name: 'Nordic Hamstring Curl', sets: 3, reps: '6-8', rest: 90,
+                      notes: 'תרגיל עילית למניעת פציעות המסטרינג. דורש שותף.' }
                 );
             }
-            
+
             const avgTimePerExercise = 6;
             const maxExercises = Math.floor(parseInt(workoutDuration) / avgTimePerExercise);
             return exercises.slice(0, maxExercises);
@@ -1013,39 +1077,85 @@
             }];
         };
 
-        // Walk-to-Run Program (based on uploaded document)
+        // Running Warmup Protocol (based on Ohio State / uploaded document)
+        const getRunningWarmup = () => {
+            return '5 דקות הליכה מהירה + תרגילי חימום: סיבובי ראש, סיבובי כתפיים לאחור, סיבובי זרועות, מעגלי ירכיים, סקוואטים בהליכה, ספיידרמן לאנג\'ים, הרמת ברכיים, בעיטות לישבן, סיבובי קרסול (10 חזרות כל תרגיל)';
+        };
+
+        // Walk-to-Run Program - Full 48-session plan (based on uploaded תוכנית מהליכה לריצה)
+        // 3 sessions/week = 16 weeks total
         const generateWalkToRunWorkout = (week, duration) => {
-            // Progressive walk-run intervals based on the uploaded 48-week program
+            // Full 48-session program mapped to weeks (3 sessions/week)
+            // Each entry covers one "phase" of training weeks
             const programs = [
-                // Weeks 1-2
-                { week: 1, intervals: 5, run: '30 שניות', walk: '2.5 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות הליכה' },
-                { week: 2, intervals: 7, run: '30 שניות', walk: '2.5 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות הליכה' },
-                // Weeks 3-6
-                { week: 3, intervals: 4, run: '30 שניות', walk: '2.5 דקות', warmup: '2 דקות ריצה + דקה הליכה', cooldown: '5 דקות' },
-                { week: 4, intervals: 6, run: '40 שניות', walk: '2:20 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות' },
-                { week: 5, intervals: 9, run: '40 שניות', walk: '2:20 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות' },
-                { week: 6, intervals: 5, run: '40 שניות', walk: '2:20 דקות', warmup: '3 דקות ריצה + דקה הליכה', cooldown: '5 דקות' },
-                // Weeks 7-12
-                { week: 7, intervals: 5, run: '1:20 דקות', walk: '2:40 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות' },
-                { week: 8, intervals: 6, run: '1:20 דקות', walk: '2:40 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות' },
-                { week: 9, intervals: 4, run: '1:20 דקות', walk: '2:40 דקות', warmup: 'דקה ריצה + דקה הליכה', cooldown: '5 דקות' },
-                { week: 10, intervals: 7, run: 'דקה', walk: '2 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות' },
-                { week: 11, intervals: 10, run: 'דקה', walk: '2 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות' },
-                { week: 12, intervals: 5, run: 'דקה', walk: '2 דקות', warmup: '5 דקות ריצה + דקה הליכה', cooldown: '5 דקות' },
+                // Phase 1 - Weeks 1-3 (Sessions 1-9): 30s run / 2.5 min walk
+                { week: 1,  intervals: 5,  run: '30 שניות',   walk: '2.5 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות הליכה', phase: '1' },
+                { week: 2,  intervals: 7,  run: '30 שניות',   walk: '2.5 דקות', warmup: '5 דקות הליכה', cooldown: '5 דקות הליכה', phase: '1' },
+                { week: 3,  intervals: 9,  run: '30 שניות',   walk: '2.5 דקות', warmup: '5 דקות הליכה + חימום דינמי', cooldown: '5 דקות', phase: '1' },
+                // Phase 2 - Weeks 4-6 (Sessions 10-18): 1 min run / 2 min walk
+                { week: 4,  intervals: 5,  run: 'דקה',        walk: '2 דקות',   warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '2' },
+                { week: 5,  intervals: 7,  run: 'דקה',        walk: '2 דקות',   warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '2' },
+                { week: 6,  intervals: 10, run: 'דקה',        walk: '2 דקות',   warmup: '5 דקות הליכה + חימום דינמי', cooldown: '5 דקות', phase: '2' },
+                // Phase 3 - Weeks 7-9 (Sessions 19-27): 2-3 min run / 2 min walk
+                { week: 7,  intervals: 4,  run: '2 דקות',     walk: '2 דקות',   warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '3' },
+                { week: 8,  intervals: 5,  run: '2.5 דקות',   walk: '2 דקות',   warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '3' },
+                { week: 9,  intervals: 6,  run: '3 דקות',     walk: '2 דקות',   warmup: '5 דקות הליכה + חימום דינמי', cooldown: '5 דקות', phase: '3' },
+                // Phase 4 - Weeks 10-12 (Sessions 28-36): 4-6 min run / 2 min walk
+                { week: 10, intervals: 4,  run: '4 דקות',     walk: '2 דקות',   warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '4' },
+                { week: 11, intervals: 4,  run: '5 דקות',     walk: '2 דקות',   warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '4' },
+                { week: 12, intervals: 4,  run: '6 דקות',     walk: '2 דקות',   warmup: '5 דקות הליכה + חימום דינמי', cooldown: '5 דקות', phase: '4' },
+                // Phase 5 - Weeks 13-16 (Sessions 37-48): 7-20 min → continuous
+                { week: 13, intervals: 3,  run: '8 דקות',     walk: 'דקה',      warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '5' },
+                { week: 14, intervals: 2,  run: '12 דקות',    walk: 'דקה',      warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '5' },
+                { week: 15, intervals: 2,  run: '18 דקות',    walk: 'דקה',      warmup: '5 דקות הליכה + חימום דינמי', cooldown: '5 דקות', phase: '5' },
+                { week: 16, intervals: 1,  run: '30-40 דקות', walk: '',          warmup: '5 דקות הליכה', cooldown: '5 דקות', phase: '6' },
             ];
-            
-            // Select appropriate week (cycle through if beyond 12 weeks)
-            const programWeek = ((week - 1) % 12) + 1;
-            const program = programs.find(p => p.week === programWeek) || programs[0];
-            
+
+            const programWeek = Math.min(week, 16);
+            const program = programs.find(p => p.week === programWeek) || programs[programWeek - 1] || programs[programs.length - 1];
+            const warmupFull = getRunningWarmup();
+
+            const mainText = program.phase === '6'
+                ? `ריצה רציפה של ${program.run} בקצב נוח`
+                : `${program.intervals} × (${program.run} ריצה קלילה + ${program.walk} הליכה)`;
+
             return [{
-                name: `תוכנית מהליכה לריצה - שבוע ${programWeek}`,
+                name: `מהליכה לריצה - שבוע ${programWeek} (שלב ${program.phase}/6)`,
                 duration: `כ-${duration} דקות`,
-                warmup: program.warmup,
-                main: `${program.intervals} פעמים: ${program.run} ריצה קלילה, ${program.walk} הליכה`,
-                cooldown: program.cooldown,
-                notes: 'עקרון ההדרגתיות הוא המפתח. אל תמהר, תן לגוף להסתגל. הריצה צריכה להיות קלילה ונוחה.'
+                warmup: warmupFull,
+                main: mainText,
+                cooldown: '5 דקות הליכה + מתיחות סטטיות: שוק, ירך קדמית, ירך אחורית',
+                notes: program.phase === '6'
+                    ? '🎉 ריצה רציפה! הגעת לשלב האחרון. ריצה בקצב שבו ניתן לנהל שיחה.'
+                    : 'עקרון ההדרגתיות הוא המפתח. אל תמהר. הריצה צריכה להיות קלילה ונוחה - "קצב שיחה".',
+                tips: 'אם האימון קשה מדי - חזור שבוע אחד אחורה. אם קל מדי - קדם שבוע קדימה.'
             }];
+        };
+
+        // Advanced Running Workout based on Nachshon Shochat 4-run/week methodology
+        // Run 1: Long easy with pickup | Run 2: Easy + strides | Run 3: Fartlek | Run 4: Progression / 5K test
+        const generateAdvancedRunningWorkout = (workoutPattern, duration, level, raceGoal, week) => {
+            // Every 4th week: replace progression run with 5K time trial
+            const isFourthWeek = week % 4 === 0;
+
+            switch(workoutPattern) {
+                case 0: // Run 1: Long run with gentle pickup in final third
+                    return generateLongRun(duration, level, raceGoal);
+
+                case 1: // Run 2: Easy run 40-60 min + 4-5 strides
+                    return generateEasyRunWithStrides(duration, level);
+
+                case 2: // Run 3: Fartlek (progressive per week pattern)
+                    return generateFartlekWorkout(duration, level, week);
+
+                case 3: // Run 4: Progression run OR 5K test (every 4th week)
+                    return isFourthWeek
+                        ? generate5KTestWorkout(duration, level)
+                        : generateProgressionRun(duration, level);
+
+                default:
+                    return generateEasyRunWithStrides(duration, level);
+            }
         };
 
         // Advanced Running Workout based on BC Running methodology
@@ -1070,83 +1180,138 @@
             }
         };
 
-        // Long Run - based on BC Running methodology
+        // Long Run - Nachshon Shochat methodology: easy with gentle pickup in final third
         const generateLongRun = (duration, level, raceGoal) => {
-            const notes = level === 'advanced' 
-                ? 'ריצה ארוכה וקלה בטווח האירובי. התחל איטי. ביום טוב - הגברה מתונה בשליש האחרון. המטרה: בניית סיבולת והתמדה.'
-                : 'ריצה ארוכה בקצב נוח. צריך להיות מסוגל לנהל שיחה לאורך כל הריצה. קח מים אם צריך.';
-            
             return [{
                 name: 'ריצה ארוכה (Long Run)',
                 duration: `${duration} דקות`,
-                pace: 'קצב אירובי נוח (60-70% מקסימום)',
-                structure: level === 'advanced' 
-                    ? 'שליש ראשון: איטי, שליש שני: קצב יציב, שליש אחרון: הגברה מתונה (אופציונלי)'
-                    : 'קצב קבוע ונוח לאורך כל הריצה',
-                notes: notes,
-                tips: 'עקרון "ארוכה ארוכה אבל כמה ארוכה?" - אל תגזים! צריך לסיים בהרגשה טובה.'
+                warmup: getRunningWarmup(),
+                structure: 'שליש ראשון: ריצה קלה מאוד (קצב שיחה) | שליש שני: קצב אירובי יציב | שליש אחרון: הגברה מתונה ונוחה',
+                pace: 'קצב אירובי נוח (60-70% מקסימום דופק). ביום טוב - הגברה מתונה בשליש האחרון.',
+                cooldown: '5 דקות הליכה + מתיחות סטטיות',
+                notes: level === 'advanced'
+                    ? 'ריצה ארוכה היא עמוד התווך של התוכנית. המטרה: בניית בסיס אירובי, לא מהירות. תרגיש שאפשר להמשיך בסיום.'
+                    : 'ריצה ארוכה בקצב נוח. "קצב שיחה" - אם אתה לא יכול לדבר, אתה רץ מהר מדי.',
+                tips: 'עיקרון נחשון שוחט: "רוץ את הארוכה לאט יותר ממה שאתה חושב שצריך". סיים בהרגשה טובה!'
             }];
         };
 
-        // Easy Run with Strides - BC Running style
+        // Easy Run with Strides - 40-60 min + 4-5 strides (Nachshon Shochat Run #2)
         const generateEasyRunWithStrides = (duration, level) => {
-            const mainDuration = duration - 10;
+            const mainDuration = Math.max(25, duration - 10);
             return [{
                 name: 'ריצה קלה עם מתגברות',
-                warmup: `${mainDuration} דקות ריצה קלה`,
-                pace: 'קצב שיחה - בקצב שבו ניתן לנהל שיחה',
-                strides: '4-6 מתגברות של 80-100 מטר',
-                notes: 'בסוף הריצה הקלה: מתגברות במישור עם רוח בגב. הליכה חזרה בין המתגברות. המתגברות משפרות את הטכניקה והכלכליות.',
-                tips: 'המתגברות הן לא ספרינט! זה תאוצה הדרגתית עד ל-90% ממהירות מקסימלית.'
+                duration: `${duration} דקות (40-60 דקות אידיאלי)`,
+                warmup: getRunningWarmup(),
+                main: `${mainDuration} דקות ריצה קלה בקצב שיחה`,
+                strides: '4-5 מתגברות של 80-100 מטר: תאוצה הדרגתית עד 90% מהירות, הליכה חזרה בין כל מתגברת',
+                cooldown: '5 דקות ריצה קלה מאוד + מתיחות סטטיות',
+                notes: 'ריצה קלה = קצב שיחה לאורך כל האימון. בסוף: מתגברות במישור עם רוח בגב.',
+                tips: 'המתגברות אינן ספרינט! תאוצה חלקה ונוחה. הן משפרות טכניקה וכלכליות ריצה.'
             }];
         };
 
-        // Fartlek Workout - based on BC Running and Nachshon Shochat methodology
+        // Fartlek - Nachshon Shochat progression across 3 weeks (Run #3)
+        // Week 1: 8-12 × 60s/60s | Week 2: 6-8 × 3min/3min | Week 3: Pyramid + sprints
         const generateFartlekWorkout = (duration, level, week) => {
-            const weekInCycle = (week % 3) + 1;
-            
+            const weekInCycle = ((week - 1) % 3) + 1; // 1, 2, or 3
+
             const fartlekVariations = [
                 {
-                    name: 'פרטלק קצר ומהיר',
-                    warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
-                    main: '8-12 פעמים: 60 שניות מהר, 60 שניות לאט',
-                    cooldown: '10 דקות ריצה קלה',
-                    notes: 'קצב קבוע לאורך האימון. אל תפתח מהר מדי! ה"מהר" זה קצב 10K, ה"לאט" זה ג\'וג קל.',
-                    intensity: 'גבוהה'
+                    name: 'פרטלק קצר - אינטרוולים של דקה',
+                    warmup: '15-20 דקות ריצה קלה + 4 מתגברות של 80מ\'',
+                    main: level === 'advanced'
+                        ? '10-12 × (60 שניות מהיר / 60 שניות ג\'וג קל)'
+                        : '8-10 × (60 שניות מהיר / 60 שניות ג\'וג קל)',
+                    cooldown: '10 דקות ריצה קלה + מתיחות',
+                    notes: 'ה"מהיר" = קצב 5K-10K (מאתגר אך ניתן לשמירה). ה"קל" = ג\'וג נוח. שמור על קצב קבוע לאורך כל החזרות.',
+                    intensity: 'גבוהה - VO2max',
+                    tip: 'עיקרון: אל תפתח מהר מדי! החזרה האחרונה צריכה להיות זהה לראשונה.'
                 },
                 {
-                    name: 'פרטלק בינוני',
+                    name: 'פרטלק בינוני - אינטרוולים של 3 דקות',
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
-                    main: '6-8 פעמים: 3 דקות מהיר-בינוני, 3 דקות קל',
-                    cooldown: '10 דקות ריצה קלה',
-                    notes: 'קצב "מהיר-בינוני" זה קצב חצי מרתון בקירוב. ניתן לקיים במאמץ לאורך כל החזרות.',
-                    intensity: 'בינונית-גבוהה'
+                    main: level === 'advanced'
+                        ? '6-8 × (3 דקות מהיר-בינוני / 3 דקות קל)'
+                        : '5-6 × (3 דקות מהיר-בינוני / 3 דקות קל)',
+                    cooldown: '10 דקות ריצה קלה + מתיחות',
+                    notes: 'ה"מהיר-בינוני" = קצב חצי מרתון (ניתן לשמירה כל 3 דקות). ה"קל" = ג\'וג קל.',
+                    intensity: 'בינונית-גבוהה - Lactate Threshold',
+                    tip: 'פרטלק הוא "משחק מהירות" - גמיש ומהנה. ניתן לעשות בשטח טבעי ולא על מסלול.'
                 },
                 {
                     name: 'פרטלק פירמידה',
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
-                    main: '2 דקות - 4 דקות - 6 דקות - 4 דקות - 2 דקות (מהר), 2-3 דקות ג\'וג קל ביניהם. סיום: 4×30 שניות מהר, 60 שניות ג\'וג',
-                    cooldown: '10 דקות ריצה קלה',
-                    notes: 'פרטלק מגוון ומהנה. הפירמידה מאפשרת עבודה על טווחי קצב שונים.',
-                    intensity: 'גבוהה-מאוד גבוהה'
+                    main: 'פירמידה: 2 דקות → 4 דקות → 6 דקות → 4 דקות → 2 דקות (מהיר), 2-3 דקות ג\'וג קל בין כל פרק. סיום: 4 × 30 שניות ספרינט / 60 שניות ג\'וג',
+                    cooldown: '10 דקות ריצה קלה + מתיחות',
+                    notes: 'פירמידה = עבודה על טווחי קצב שונים. הקצב ב-2 דקות מהיר יותר מב-6 דקות.',
+                    intensity: 'גבוהה-מאוד גבוהה',
+                    tip: 'הספרינטים בסוף - נשמרים "בטנק". הם קצרים, מהירים, ומשפרים את היכולת האנאירובית.'
                 }
             ];
-            
+
             return [fartlekVariations[weekInCycle - 1]];
         };
 
-        // Progression Run - BC Running methodology
+        // Progression Run - Nachshon Shochat Run #4: easy out, gradually faster back, last km hard
         const generateProgressionRun = (duration, level) => {
+            const half = Math.round(duration / 2);
             return [{
-                name: 'פרוגרשן ראן (Progression Run)',
-                structure: 'התחל בריצה קלה, הגבר הדרגתית כל 5-10 דקות',
+                name: 'ריצת פרוגרסיה (Progression Run)',
                 duration: `${duration} דקות`,
-                progression: level === 'advanced'
-                    ? 'שליש ראשון: קצב אירובי קל → שליש שני: קצב מרתון → שליש אחרון: קצב חצי מרתון או מהר יותר'
-                    : 'התחל בקצב נוח, סיים בקצב שעדיין מאתגר אבל נשלט',
-                notes: 'הלוך בריצה קלה, חזור בהגברה הדרגתית. בקילומטר האחרון - תן הכל! זהו אימון שמשלב סיבולת ומהירות.',
-                tips: 'הסוד הוא לא להתחיל מהר מדי. "רוצו את הלאט לאט יותר כדי לרוץ את המהר מהר יותר"'
+                warmup: getRunningWarmup(),
+                structure: level === 'advanced'
+                    ? `${Math.round(duration * 0.35)} דקות קל → ${Math.round(duration * 0.35)} דקות קצב מרתון → ${Math.round(duration * 0.3)} דקות קצב חצי מרתון → קילומטר אחרון: כל מה שיש!`
+                    : `מחצית ראשונה (${half} דקות): ריצה קלה בקצב שיחה → מחצית שנייה: הגברה הדרגתית, דקות אחרונות: מאמץ מקסימלי`,
+                cooldown: '5 דקות הליכה + מתיחות סטטיות',
+                notes: 'עיקרון: "הלוך קל - חזור מהיר". ריצה בנגיעה הפוכה לכיוון הבית. הגברה הדרגתית - לא קפיצות פתאומיות.',
+                tips: 'נחשון שוחט: "הסוד הוא לא להתחיל מהר מדי. רוצו את הקל לאט יותר, לרוץ את המהר מהר יותר"'
             }];
+        };
+
+        // 5K Test/Time Trial - replaces progression run every 4th week
+        const generate5KTestWorkout = (duration, level) => {
+            return [{
+                name: '5K מבחן (בדיקת כושר)',
+                duration: `כ-30-40 דקות (כולל חימום וצינון)`,
+                warmup: getRunningWarmup() + ' | + 2-3 קמ ריצה קלה + 4 מתגברות',
+                main: 'ריצה מקסימלית של 5 ק"מ - מדוד את הזמן!',
+                cooldown: '10 דקות ריצה קלה מאוד + מתיחות ארוכות',
+                notes: 'מבחן כל 4 שבועות לבדיקת התקדמות. הקצב ב-5K משמש כבסיס לכל חישובי הקצב.',
+                tips: 'לאחר המבחן: רשום את הזמן ועדכן את קצבי האימון בהתאם. שיפור של 10-30 שניות בשבוע הוא נפלא!'
+            }];
+        };
+
+        // Run Less Run Faster (RLRF) - 3 key workouts methodology
+        // Intervals (VO2max) + Tempo (LT) + Long Run
+        const generateRLRFWorkout = (workoutType, duration, level, week) => {
+            if (workoutType === 'intervals') {
+                const weekInCycle = ((week - 1) % 4) + 1;
+                const intervalSets = [
+                    '6 × 400מ\' (אחיזה: 5K) + 400מ\' ג\'וג בין חזרות',
+                    '4 × 800מ\' (קצב 5K) + 400מ\' ג\'וג',
+                    '3 × 1200מ\' (קצב 5K-10K) + 400מ\' ג\'וג',
+                    '5 × 600מ\' (קצב 5K) + 300מ\' ג\'וג'
+                ];
+                return [{
+                    name: 'ריצת אינטרוולים (RLRF - Workout 1)',
+                    warmup: '10-15 דקות ריצה קלה + מתיחות דינמיות + 4 מתגברות',
+                    main: intervalSets[weekInCycle - 1],
+                    cooldown: '10-15 דקות ריצה קלה',
+                    notes: 'RLRF: 3 אימונים בשבוע במקום 5-6. כל אימון הוא "מפתח" ולכן חייב להיות איכותי.',
+                    tips: 'קצב 5K = קצב שניתן לשמור ב-5K תחרות. כל חזרה זהה בקצב.'
+                }];
+            } else if (workoutType === 'tempo') {
+                return [{
+                    name: 'ריצת טמפו (RLRF - Workout 2)',
+                    warmup: '1.5-3 קמ ריצה קלה',
+                    main: `${Math.round(duration * 0.6)} דקות ריצת טמפו (קצב 10K / 15-45 שניות איטי מקצב 5K)`,
+                    cooldown: '10 דקות ריצה קלה',
+                    notes: 'ריצת טמפו = מאמץ "נוח-קשה". דופק 80-90% מקסימום. ניתן לדבר מילים בודדות.',
+                    tips: 'RLRF: הטמפו משפר את סף הלקטט - הנקודה שבה הגוף עובר לאנאירובי.'
+                }];
+            }
+            return generateLongRun(duration, level, null);
         };
 
         // Main App
