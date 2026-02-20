@@ -232,15 +232,14 @@
             } else if (hasAerobicGoal) {
                 // Plan length based on race goal (BC Running: gradual preparation)
                 const rg = enrichedCardioTarget.raceGoal;
-                if      (rg === 'marathon')      duration = 18;
-                else if (rg === 'half-marathon') duration = 14;
-                else if (rg === '10k')           duration = 10;
+                if      (rg === 'marathon')      duration = 24;
+                else if (rg === 'half-marathon') duration = 18;
+                else if (rg === '10k')           duration = 16;
                 else if (rg === '5k')            duration = 12;
                 else                             duration = 12; // general fitness
 
-                if      (activityLevel === 'מתחיל') workoutsPerWeek = 3;
-                else if (activityLevel === 'בינוני') workoutsPerWeek = 4;
-                else                                 workoutsPerWeek = 5;
+                const defaultAerobicWorkouts = activityLevel === 'מתחיל' ? 3 : activityLevel === 'בינוני' ? 4 : 5;
+                workoutsPerWeek = parseInt(weeklyWorkouts) || defaultAerobicWorkouts;
             } else {
                 duration = goals.includes('ירידה במשקל') ? 6 : 4;
                 if      (activityLevel === 'מתחיל') workoutsPerWeek = 3;
@@ -273,6 +272,7 @@
                 const intensityMultiplier = 1 + (Math.floor((week - 1) / 2) * 0.1);
                 const runningDuration = getRunningDuration(enrichedCardioTarget.runningLevel, week, duration);
 
+                let runningSessionIdx = 0;
                 for (let day = 1; day <= workoutsPerWeek; day++) {
                     let workout;
 
@@ -295,7 +295,7 @@
 
                         if (isStrengthDay && isShortStrength) {
                             // Running + short runner strength appended
-                            const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase);
+                            const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
                             const strengthExercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '15');
                             workout = {
                                 day, type: 'ריצה + חיזוק',
@@ -310,7 +310,7 @@
                             const exercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '40');
                             workout = { day, type: 'כוח לרצים', exercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
                         } else {
-                            const exercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase);
+                            const exercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
                             workout = { day, type: 'ריצה', exercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
                         }
 
@@ -426,6 +426,29 @@
                 medium: `${fmt(pacePerKm + 0.25)}-${fmt(pacePerKm + 0.45)}`,
                 fast:   `${fmt(pacePerKm - 0.08)}-${fmt(pacePerKm + 0.08)}`,
                 r400:   fmt((pacePerKm - 0.15) * 0.4)
+            };
+        };
+
+        // Calculate personal pace zones from 10K time
+        // Easy pace = 10K pace + 90-120 sec/km; Tempo = 10K pace + 20-35 sec/km
+        const getPaceFrom10K = (time10k) => {
+            if (!time10k) return null;
+            const clean = time10k.replace(/[^0-9:]/g, '');
+            const parts = clean.split(':');
+            if (parts.length !== 2) return null;
+            const totalMin = parseFloat(parts[0]) + parseFloat(parts[1]) / 60;
+            if (isNaN(totalMin) || totalMin <= 0) return null;
+            const pacePerKm = totalMin / 10;
+            const fmt = (m) => {
+                const min = Math.floor(m);
+                const sec = Math.round((m - min) * 60);
+                return `${min}:${sec.toString().padStart(2, '0')}`;
+            };
+            return {
+                easy:   `${fmt(pacePerKm + 1.5)}-${fmt(pacePerKm + 2.0)}`,
+                medium: `${fmt(pacePerKm + 0.25)}-${fmt(pacePerKm + 0.5)}`,
+                fast:   `${fmt(pacePerKm - 0.2)}-${fmt(pacePerKm)}`,
+                r400:   fmt((pacePerKm - 0.25) * 0.4)
             };
         };
 
@@ -995,12 +1018,28 @@
             return exercises.slice(0, maxExercises);
         };
 
-        const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }) => {
+        // Calculate realistic running distance (km) from run time (min) and pace zones
+        // Used to show honest distances instead of hardcoded ranges
+        const calcRunDistKm = (runMinutes, paceZones, level) => {
+            let avgPaceMin;
+            if (paceZones && paceZones.easy) {
+                const segs = paceZones.easy.split('-').map(p => {
+                    const [m, s] = p.trim().split(':').map(Number);
+                    return m + (s || 0) / 60;
+                });
+                avgPaceMin = segs.length === 2 ? (segs[0] + segs[1]) / 2 : segs[0];
+            } else {
+                avgPaceMin = level === 'advanced' ? 5.25 : level === 'intermediate' ? 6.25 : 7.5;
+            }
+            return runMinutes / avgPaceMin;
+        };
+
+        const generateCardioWorkout = (goals, level, multiplier, cardioTarget = {}, week, workoutDuration = 60, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
             // Always route to running when aerobic goal is selected
             const isRunningProgram = goals.includes('שיפור יכולת אירובית');
 
             if (isRunningProgram) {
-                return generateRunningWorkout(cardioTarget, week, workoutDuration, goals, totalWeeks, phase);
+                return generateRunningWorkout(cardioTarget, week, workoutDuration, goals, totalWeeks, phase, runningSessionIdx);
             }
             
             // General cardio workout (non-running focused)
@@ -1051,12 +1090,12 @@
         // 5. עבודה עם הגוף (Work with the body) - listen, adapt, respect recovery
         // 6. פרטלק > אינטרוולים - creative fartlek preferred over rigid track intervals
         // 7. בסיס אירובי (Aerobic base) - foundation before quality, Lydiard method
-        const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }) => {
+        const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
             const { runningLevel, raceGoal, current5kTime, current10kTime } = cardioTarget;
             const duration = parseInt(workoutDuration);
 
             // Resolve personal pace zones from 5K (or 10K) time
-            const paceZones = getPaceFrom5K(current5kTime) || getPaceFrom5K(current10kTime) || null;
+            const paceZones = getPaceFrom5K(current5kTime) || getPaceFrom10K(current10kTime) || null;
 
             // BC Running 4-week cycle (Nachshon Shochat methodology):
             // Cycle: Long Run → Easy+Strides → Fartlek → Tempo/Progression/Test
@@ -1072,7 +1111,7 @@
                 return generateWalkToRunWorkout(week, duration);
             }
 
-            return generateAdvancedRunningWorkout(weekInCycle, duration, runningLevel || 'intermediate', raceGoal || 'general', week, paceZones, phase, totalWeeks);
+            return generateAdvancedRunningWorkout(weekInCycle, duration, runningLevel || 'intermediate', raceGoal || 'general', week, paceZones, phase, totalWeeks, runningSessionIdx);
         };
 
         // Running Warmup Protocol (based on Ohio State / uploaded document)
@@ -1134,8 +1173,20 @@
         // Based on Nachshon Shochat + Lydiard periodization
         // 4-week cycle: Long Run → Easy+Strides → Fartlek → Tempo/Progression/Test
         // Phase-aware: base = more easy, build = fartlek, peak = tempo+intervals, taper = short
-        const generateAdvancedRunningWorkout = (weekInCycle, duration, level, raceGoal, week, paceZones, phase = { key: 'base' }, totalWeeks = 12) => {
+        const generateAdvancedRunningWorkout = (weekInCycle, duration, level, raceGoal, week, paceZones, phase = { key: 'base' }, totalWeeks = 12, runningSessionIdx = 0) => {
             const phaseKey = phase ? phase.key : 'base';
+
+            // Secondary runs in the week → vary by session index:
+            // idx=1: easy recovery | idx=2: progression (secondary quality) | idx=3+: easy again
+            if (runningSessionIdx === 1) {
+                return generateEasyRunWithStrides(Math.round(duration * 0.85), level);
+            }
+            if (runningSessionIdx === 2) {
+                return generateProgressionRun(Math.round(duration * 0.90), level);
+            }
+            if (runningSessionIdx > 2) {
+                return generateEasyRunWithStrides(Math.round(duration * 0.80), level);
+            }
 
             // Every 8th week: 5K time trial
             const is5KTestWeek = (week % 8 === 0);
@@ -1149,9 +1200,12 @@
                 return generateProgressionRun(taperDuration, level); // short progression
             }
 
+            // Long run gets 50-70% more time than the base easy run
+            const longRunDur = Math.round(duration * (level === 'advanced' ? 1.7 : 1.5));
+
             // Base phase: emphasize aerobic base, minimal quality
             if (phaseKey === 'base') {
-                if (weekInCycle === 1) return generateLongRun(duration, level, raceGoal);
+                if (weekInCycle === 1) return generateLongRun(longRunDur, level, raceGoal, paceZones);
                 if (weekInCycle === 2) return generateEasyRunWithStrides(duration, level);
                 if (weekInCycle === 3) return generateEasyRunWithStrides(duration, level); // extra easy in base
                 return generateProgressionRun(duration, level); // gentle quality
@@ -1159,7 +1213,7 @@
 
             // Build phase: introduce fartlek and tempo
             if (phaseKey === 'build') {
-                if (weekInCycle === 1) return generateLongRun(duration, level, raceGoal);
+                if (weekInCycle === 1) return generateLongRun(longRunDur, level, raceGoal, paceZones);
                 if (weekInCycle === 2) return generateEasyRunWithStrides(duration, level);
                 if (weekInCycle === 3) return generateFartlekWorkout(duration, level, week);
                 if (is5KTestWeek) return generate5KTestWorkout(duration, level);
@@ -1168,7 +1222,7 @@
 
             // Peak phase: full quality mix - all workout types
             // weekInCycle: 1=Long, 2=Easy+Strides, 3=Fartlek, 4=Tempo or Test
-            if (weekInCycle === 1) return generateLongRun(duration, level, raceGoal);
+            if (weekInCycle === 1) return generateLongRun(longRunDur, level, raceGoal, paceZones);
             if (weekInCycle === 2) return generateEasyRunWithStrides(duration, level);
             if (weekInCycle === 3) return generateFartlekWorkout(duration, level, week);
             if (is5KTestWeek) return generate5KTestWorkout(duration, level);
@@ -1177,17 +1231,23 @@
 
         // Long Run - BC Running methodology: aerobic base, "courage to slow down"
         // Nachshon Shochat: easy with gentle pickup in final third
-        // BC Running target: 25-26km or 2 hours; peak weeks 32-36km
         const generateLongRun = (duration, level, raceGoal, paceZones = null) => {
             const easyPace = paceZones ? `קצב קל: ${paceZones.easy} לק"מ` : 'קצב שיחה מלא (60-70% דופק מקסימום)';
-            const targetDist = level === 'advanced' ? '22-32 ק"מ' : '14-22 ק"מ';
+            // Running time = total duration minus ~10 min warmup walking/dynamic
+            const runTime = Math.max(20, duration - 10);
+            const t1 = Math.round(runTime * 0.33);
+            const t2 = Math.round(runTime * 0.34);
+            const t3 = runTime - t1 - t2;
+            // Calculate distance from actual pace, not hardcoded
+            const distKm = calcRunDistKm(runTime, paceZones, level);
+            const targetDist = `${Math.floor(distKm * 0.9)}-${Math.ceil(distKm * 1.1)} ק"מ`;
             return [{
                 name: 'ריצה ארוכה (Long Run) - עמוד התווך',
-                duration: `${duration} דקות`,
+                duration: `${duration} דקות (ריצה: ${runTime} דקות + חימום/צינון)`,
                 warmup: getRunningWarmup(),
-                structure: 'שליש ראשון: קל מאוד (Zone 1) | שליש שני: אירובי יציב (Zone 2) | שליש אחרון: הגברה מתונה בלבד',
+                structure: `${t1} דקות: קל מאוד (Zone 1 — קצב שיחה מלא) | ${t2} דקות: אירובי יציב (Zone 2) | ${t3} דקות: הגברה מתונה`,
                 pace: easyPace + ` | יעד מרחק: ${targetDist}`,
-                cooldown: '5-10 דקות הליכה + מתיחות סטטיות',
+                cooldown: '5-7 דקות הליכה + מתיחות סטטיות',
                 notes: level === 'advanced'
                     ? 'BC Running: הריצה הארוכה בונה את הבסיס האירובי - ה"בנק" של VO2max, שריפת שומן, סיבולת נפשית. לא ריצת מהירות. סיים בהרגשה שאפשר המשיך.'
                     : 'BC Running: "האומץ להאט" - כדי לרוץ מהר יותר, קודם ללמוד לרוץ לאט יותר. קצב שיחה מלא.',
@@ -1223,6 +1283,7 @@
             const fartlekVariations = [
                 {
                     name: 'פרטלק קצר - "משחק מהירות" (Short Fartlek)',
+                    duration: `${duration} דקות`,
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות של 80מ\' (חלק מהחימום לאימוני איכות - BC Running)',
                     main: level === 'advanced'
                         ? '10-12 × (60 שניות מהיר / 60 שניות ג\'וג קל) - עדיף בשטח טבעי, לא מסלול!'
@@ -1230,10 +1291,11 @@
                     cooldown: '10 דקות ריצה קלה + מתיחות',
                     notes: 'BC Running: "פרטלק = שחרור יצירתי ומהנה". ה"מהיר" = קצב 5K (מאתגר אך לא מקסימלי). ה"קל" = ג\'וג קל שמאפשר שיחה. שמור על קצב קבוע מהחזרה הראשונה לאחרונה.',
                     intensity: 'גבוהה - VO2max',
-                    tip: 'BC Running: אל תגיע למסלול! שטח טבעי, גבעות, שבילים - הם הזירה הטבעית של הפרטלק. עיקרון: "train, don\'t strain".'
+                    tips: 'BC Running: אל תגיע למסלול! שטח טבעי, גבעות, שבילים - הם הזירה הטבעית של הפרטלק. עיקרון: "train, don\'t strain".'
                 },
                 {
                     name: 'פרטלק בינוני - סף לקטט (Medium Fartlek)',
+                    duration: `${duration} דקות`,
                     warmup: '15-20 דקות ריצה קלה + 4 מתגברות',
                     main: level === 'advanced'
                         ? '6-8 × (3 דקות מהיר-בינוני / 3 דקות קל) - שנה כיוון, כלול גבעות, הפתע את עצמך'
@@ -1241,16 +1303,17 @@
                     cooldown: '10 דקות ריצה קלה + מתיחות',
                     notes: 'BC Running: ה"מהיר-בינוני" = קצב 10K-חצי מרתון (ניתן לשמירה לאורך 3 דקות בכל חזרה). זה אזור הסף הלקטי - ה"מנוע" שמשפר את הריצה לאורך זמן.',
                     intensity: 'בינונית-גבוהה - Lactate Threshold',
-                    tip: 'פרטלק = "משחק מהירות" שוודי. גמיש ומהנה. ניתן לשנות על פי תחושה ביום - זו חוזקתו.'
+                    tips: 'פרטלק = "משחק מהירות" שוודי. גמיש ומהנה. ניתן לשנות על פי תחושה ביום - זו חוזקתו.'
                 },
                 {
                     name: 'פרטלק פירמידה + ספרינטים (Pyramid Fartlek)',
+                    duration: `${duration} דקות`,
                     warmup: '15-20 דקות ריצה קלה + 4-5 מתגברות',
                     main: 'פירמידה: 2→4→6→4→2 דקות (מהיר), 2-3 דקות ג\'וג קל בין כל פרק. סיום: 4×30 שניות ספרינט (א-לקטי) / 60 שניות ג\'וג',
                     cooldown: '10 דקות ריצה קלה + מתיחות',
                     notes: 'BC Running: הפירמידה עובדת על כל טווחי הקצב. הקצב ב-2 דקות מהיר מב-6 דקות. הספרינטים הקצרים בסוף (≤30 שניות במאמץ מירבי) = אימון "א-לקטי" שמשפר מהירות טהורה לפי שיטת לידיארד.',
                     intensity: 'גבוהה-מאוד גבוהה',
-                    tip: 'BC Running: שמור את הספרינטים "בטנק". הם קצרים (עד 10-30 שניות) ומירביים. זו הדרך לשפר מהירות טהורה - לא חזרות 400מ\' ארוכות!'
+                    tips: 'BC Running: שמור את הספרינטים "בטנק". הם קצרים (עד 10-30 שניות) ומירביים. זו הדרך לשפר מהירות טהורה - לא חזרות 400מ\' ארוכות!'
                 }
             ];
 
@@ -2169,6 +2232,25 @@
                                                     className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                                 />
                                             </div>
+
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                    כמה אימונים בשבוע תרצה לבצע?
+                                                </label>
+                                                <select
+                                                    name="weeklyWorkouts"
+                                                    value={formData.weeklyWorkouts || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                >
+                                                    <option value="">בחר (ברירת מחדל לפי רמה)</option>
+                                                    <option value="2">2 אימונים בשבוע</option>
+                                                    <option value="3">3 אימונים בשבוע</option>
+                                                    <option value="4">4 אימונים בשבוע</option>
+                                                    <option value="5">5 אימונים בשבוע</option>
+                                                    <option value="6">6 אימונים בשבוע</option>
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -2293,10 +2375,6 @@
                                 </div>
                             </div>
 
-                            {/* DEBUG BANNER - remove after diagnosis */}
-                            <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-3 mb-4 text-xs font-mono" dir="ltr">
-                                <strong>DEBUG v2.1</strong> | goals: [{workoutPlan._debug && workoutPlan._debug.goals.join(', ')}] | isMuscle: {String(workoutPlan._debug && workoutPlan._debug.isMuscleBuilding)} | isAerobic: {String(workoutPlan._debug && workoutPlan._debug.hasAerobicGoal)} | raceGoal: {workoutPlan._debug && workoutPlan._debug.raceGoal} | duration: {workoutPlan.duration}w
-                            </div>
 
                             {/* Trainee Summary */}
                             <div className="bg-purple-50 rounded-lg p-4 mb-6">
