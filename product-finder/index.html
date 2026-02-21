@@ -508,47 +508,21 @@
 
     // ── Claude API call ──────────────────────────────────────────
     async function callClaudeAPI(apiKey, productType) {
-        const systemPrompt = `אתה מומחה להמלצות מוצרים עם דגש על עמידות ואיכות.
-כאשר מקבלים סוג מוצר, חפש ומצא את המוצרים הטובים ביותר הקיימים כיום בשוק (2024-2025).
+        const systemPrompt = `אתה מומחה להמלצות מוצרים. החזר תמיד JSON תקני בלבד — ללא markdown, ללא הסברים, ללא טקסט לפני או אחרי.
 
-החזר תמיד JSON בפורמט הבא בלבד — ללא כל טקסט נוסף לפני או אחרי:
+פורמט JSON מדויק (עבור כל קטגוריה בדיוק 2 מוצרים):
 
-{
-  "searchSummary": "תיאור קצר בעברית של מה חיפשת",
-  "categories": {
-    "premium": [
-      {
-        "name": "שם הדגם המלא",
-        "brand": "שם המותג",
-        "priceRange": "₪XXX–XXX",
-        "durabilityScore": 9,
-        "qualityScore": 9,
-        "keyFeatures": ["תכונה 1", "תכונה 2", "תכונה 3"],
-        "pros": ["יתרון 1", "יתרון 2"],
-        "cons": ["חיסרון 1"],
-        "description": "תיאור קצר בעברית (2-3 משפטים)",
-        "buyLinks": [
-          {"site": "Amazon", "url": "https://www.amazon.com/s?k=PRODUCT+NAME"},
-          {"site": "KSP", "url": "https://ksp.co.il/web/cat/search/?q=PRODUCT+NAME"}
-        ]
-      }
-    ],
-    "durable": [ /* same structure, 2-3 products */ ],
-    "value":   [ /* same structure, 2-3 products */ ],
-    "budget":  [ /* same structure, 2-3 products */ ]
-  }
-}
+{"searchSummary":"משפט אחד","categories":{"premium":[{"name":"שם","brand":"מותג","priceRange":"₪XXX-XXX","durabilityScore":9,"qualityScore":9,"keyFeatures":["פיצ'ר 1","פיצ'ר 2"],"pros":["יתרון"],"cons":["חיסרון"],"description":"משפט אחד קצר"},{"name":"שם2","brand":"מותג2","priceRange":"₪XXX-XXX","durabilityScore":8,"qualityScore":9,"keyFeatures":["פיצ'ר 1","פיצ'ר 2"],"pros":["יתרון"],"cons":["חיסרון"],"description":"משפט אחד קצר"}],"durable":[...2 products...],"value":[...2 products...],"budget":[...2 products...]}}
 
-כללים:
-- כלול 2-3 מוצרים בכל קטגוריה
-- המחירים בשקלים (₪)
-- premium = מיועד לאלה שרוצים את הכי טוב, ללא פשרות
-- durable = המוצרים שידועים בעמידותם ואורך חיים ארוך
-- value = היחס הכי טוב בין מחיר לאיכות
-- budget = אפשרות זולה שעדיין מספקת ביצועים סבירים
-- buyLinks: צור קישורים לחיפוש בAmazon ו-KSP עם שם המוצר ב-URL`;
+חוקים:
+- בדיוק 2 מוצרים בכל קטגוריה
+- description = משפט אחד קצר בלבד
+- keyFeatures = מקסימום 2 פריטים
+- pros/cons = פריט אחד כל אחד
+- אל תכלול buyLinks
+- החזר JSON תקני בלבד`;
 
-        const userPrompt = `מצא את המוצרים הטובים ביותר מסוג: "${productType}"`;
+        const userPrompt = `מוצר: "${productType}"`;
 
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -560,7 +534,7 @@
             },
             body: JSON.stringify({
                 model: MODEL,
-                max_tokens: 4096,
+                max_tokens: 8096,
                 system: systemPrompt,
                 messages: [{ role: 'user', content: userPrompt }],
             }),
@@ -572,15 +546,25 @@
         }
 
         const json = await response.json();
-        const text = json.content?.[0]?.text || '';
+        let text = json.content?.[0]?.text || '';
 
-        // Extract JSON from response
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('תגובה לא תקינה מה-AI. נסה שוב.');
+        // Strip markdown code blocks if present
+        text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
-        const parsed = JSON.parse(jsonMatch[0]);
+        // Extract JSON object
+        const start = text.indexOf('{');
+        const end   = text.lastIndexOf('}');
+        if (start === -1 || end === -1) throw new Error('תגובה לא תקינה מה-AI. נסה שוב.');
+        const jsonStr = text.slice(start, end + 1);
+
+        let parsed;
+        try {
+            parsed = JSON.parse(jsonStr);
+        } catch (e) {
+            throw new Error(`שגיאה בפענוח התגובה: ${e.message}`);
+        }
+
         if (!parsed.categories) throw new Error('מבנה נתונים שגוי בתגובה.');
-
         return parsed;
     }
 
