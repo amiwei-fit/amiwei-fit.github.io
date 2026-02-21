@@ -314,6 +314,11 @@
                 }
             }
 
+            // Week offset for continuation plans: ensures the 4-week exercise rotation
+            // continues seamlessly from where the previous plan ended.
+            // e.g. if previous plan was 8 weeks, this plan starts at week 9 for rotation purposes.
+            const continuationOffset = Math.max(0, (parseInt(userData.continuationFromWeek) || 1) - 1);
+
             // Running workout duration (by level — not the form's 60-min default)
             const getRunningDuration = (level, week, totalWeeks) => {
                 const base = level === 'advanced' ? 50 : level === 'intermediate' ? 40 : 28;
@@ -345,7 +350,7 @@
 
                     if (isMuscleBuilding) {
                         const sessionNum = (week - 1) * workoutsPerWeek + day;
-                        const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '', systemPromptText);
+                        const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || [], week + continuationOffset, sessionNum, userData.strengthExperience || '', systemPromptText);
                         const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
                         workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null, phase: phase.name };
 
@@ -1771,6 +1776,7 @@
             const [showCreateForm, setShowCreateForm] = useState(false);
             const [selectedTrainee, setSelectedTrainee] = useState(null);
             const [editingTrainee, setEditingTrainee] = useState(null);
+            const [continuationTrainee, setContinuationTrainee] = useState(null);
             const [loading, setLoading] = useState(true);
             const [showArchive, setShowArchive] = useState(false);
 
@@ -1836,6 +1842,19 @@
                 );
             }
 
+            if (continuationTrainee) {
+                return (
+                    <BuildContinuationPlan
+                        trainee={continuationTrainee}
+                        onBack={() => setContinuationTrainee(null)}
+                        onComplete={() => {
+                            setContinuationTrainee(null);
+                            refreshTrainees();
+                        }}
+                    />
+                );
+            }
+
             if (editingTrainee) {
                 return (
                     <EditTraineePlan
@@ -1860,6 +1879,10 @@
                         onEditPlan={(trainee) => {
                             setSelectedTrainee(null);
                             setEditingTrainee(trainee);
+                        }}
+                        onContinuationPlan={(trainee) => {
+                            setSelectedTrainee(null);
+                            setContinuationTrainee(trainee);
                         }}
                     />
                 );
@@ -3231,8 +3254,155 @@
             );
         }
 
+        // Build Continuation Plan for an existing trainee
+        function BuildContinuationPlan({ trainee, onBack, onComplete }) {
+            const previousPlan   = trainee.workoutPlan;
+            const planNumber     = ((trainee.planHistory || []).length) + 2; // Plan #2, #3...
+            const prevDuration   = previousPlan ? (previousPlan.duration || 0) : 0;
+            // Week offset: continuation starts where previous plan ended
+            const continuationFromWeek = prevDuration + 1;
+
+            const [planDuration, setPlanDuration]               = React.useState('');
+            const [customInstructions, setCustomInstructions]   = React.useState(trainee.customInstructions || '');
+            const [generatedPlan, setGeneratedPlan]             = React.useState(null);
+            const [step, setStep]                               = React.useState('settings');
+            const [saving, setSaving]                           = React.useState(false);
+
+            const handleGenerate = () => {
+                const planData = {
+                    ...trainee,
+                    planWeeks: planDuration || undefined,
+                    customInstructions,
+                    continuationFromWeek
+                };
+                const newPlan = generateWorkoutPlan(planData);
+                setGeneratedPlan({ ...newPlan, planNumber });
+                setStep('preview');
+            };
+
+            const handleSave = async () => {
+                setSaving(true);
+                try {
+                    const history = trainee.planHistory || [];
+                    const archivedPlan = {
+                        ...previousPlan,
+                        archivedAt: new Date().toISOString(),
+                        planNumber: planNumber - 1
+                    };
+                    await storage.updateTrainee(trainee.id, {
+                        workoutPlan: generatedPlan,
+                        planHistory: [...history, archivedPlan]
+                    });
+                    onComplete();
+                } catch (error) {
+                    console.error('Error saving continuation plan:', error);
+                    alert('שגיאה בשמירת התוכנית. אנא נסה שוב.');
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            const handleRegenerate = (systemPrompt) => {
+                const planData = {
+                    ...trainee,
+                    planWeeks: planDuration || undefined,
+                    customInstructions: systemPrompt || customInstructions,
+                    continuationFromWeek
+                };
+                setGeneratedPlan({ ...generateWorkoutPlan(planData), planNumber });
+            };
+
+            if (step === 'preview') {
+                return (
+                    <PlanPreviewEditor
+                        formData={{ ...trainee, customInstructions }}
+                        workoutPlan={generatedPlan}
+                        onBack={() => setStep('settings')}
+                        onSave={handleSave}
+                        onRegenerate={handleRegenerate}
+                        onUpdatePlan={setGeneratedPlan}
+                    />
+                );
+            }
+
+            // Settings step
+            const prevTotal     = previousPlan ? previousPlan.weeks.reduce((s, w) => s + w.workouts.length, 0) : 0;
+            const prevCompleted = previousPlan ? previousPlan.weeks.reduce((s, w) => s + w.workouts.filter(wo => wo.completed).length, 0) : 0;
+            const prevPct       = prevTotal > 0 ? Math.round(prevCompleted / prevTotal * 100) : 0;
+
+            return (
+                <div className="min-h-screen bg-gray-50 py-8 px-4">
+                    <div className="max-w-2xl mx-auto">
+                        <button onClick={onBack} className="mb-6 text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-2">
+                            ← חזרה
+                        </button>
+
+                        <div className="bg-white rounded-2xl shadow-lg p-8">
+                            <h1 className="text-2xl font-bold text-gray-800 mb-1">תוכנית המשך</h1>
+                            <p className="text-gray-500 mb-6">{trainee.name} · תוכנית מספר {planNumber}</p>
+
+                            {previousPlan && (
+                                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
+                                    <h3 className="font-semibold text-purple-800 mb-2">תוכנית נוכחית (תועבר להיסטוריה)</h3>
+                                    <div className="text-sm text-purple-700 space-y-1">
+                                        <div>{previousPlan.duration} שבועות · {previousPlan.workoutsPerWeek} אימונים בשבוע</div>
+                                        <div>{prevCompleted} מתוך {prevTotal} אימונים הושלמו ({prevPct}%)</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-5">
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        אורך תוכנית המשך <span className="text-gray-400 font-normal text-sm">(ברירת מחדל לפי מטרה)</span>
+                                    </label>
+                                    <select
+                                        value={planDuration}
+                                        onChange={e => setPlanDuration(e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        <option value="">ברירת מחדל לפי מטרה</option>
+                                        <option value="4">4 שבועות</option>
+                                        <option value="6">6 שבועות</option>
+                                        <option value="8">8 שבועות</option>
+                                        <option value="10">10 שבועות</option>
+                                        <option value="12">12 שבועות</option>
+                                        <option value="16">16 שבועות</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        הוראות מיוחדות <span className="text-gray-400 font-normal text-sm">(אופציונלי)</span>
+                                    </label>
+                                    <textarea
+                                        value={customInstructions}
+                                        onChange={e => setCustomInstructions(e.target.value)}
+                                        rows={3}
+                                        placeholder="לדוגמה: הגבר עצימות, הוסף תרגילי גב, שנה יחס קרדיו/כוח..."
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                                    />
+                                </div>
+
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+                                    <strong>המשכיות אוטומטית:</strong> התוכנית תמשיך מנקודת הסיום של התוכנית הנוכחית — רוטציית התרגילים (סקווט/דדליפט, חזה שטוח/משופע) תמשיך ללא הפסקה.
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleGenerate}
+                                className="w-full mt-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-bold text-lg hover:opacity-90 transition"
+                            >
+                                בנה תוכנית המשך ←
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         // Trainee Detail View (for trainer)
-        function TraineeDetailView({ trainee, onBack, onEditPlan }) {
+        function TraineeDetailView({ trainee, onBack, onEditPlan, onContinuationPlan }) {
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [showShareModal, setShowShareModal] = useState(false);
             const [emailBody, setEmailBody] = useState('');
@@ -3331,7 +3501,7 @@ ${traineeLink}
                                         {trainee.email}
                                     </div>
                                 </div>
-                                <div className="flex gap-3">
+                                <div className="flex gap-3 flex-wrap">
                                     {onEditPlan && (
                                         <button
                                             onClick={() => onEditPlan(trainee)}
@@ -3339,6 +3509,15 @@ ${traineeLink}
                                         >
                                             <span>✏️</span>
                                             ערוך תוכנית
+                                        </button>
+                                    )}
+                                    {onContinuationPlan && trainee.workoutPlan && (
+                                        <button
+                                            onClick={() => onContinuationPlan(trainee)}
+                                            className="bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition flex items-center gap-2"
+                                        >
+                                            <span>➡️</span>
+                                            תוכנית המשך
                                         </button>
                                     )}
                                     <button
@@ -3395,6 +3574,33 @@ ${traineeLink}
                                 <p className="text-gray-600">השלים {completedWorkouts} מתוך {totalWorkouts} אימונים</p>
                             </div>
                         </div>
+
+                        {trainee.planHistory && trainee.planHistory.length > 0 && (
+                            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                                <h3 className="font-bold text-gray-800 mb-3">📚 היסטוריית תוכניות</h3>
+                                <div className="space-y-3">
+                                    {trainee.planHistory.map((plan, idx) => {
+                                        const total = plan.weeks ? plan.weeks.reduce((s, w) => s + w.workouts.length, 0) : 0;
+                                        const done  = plan.weeks ? plan.weeks.reduce((s, w) => s + w.workouts.filter(wo => wo.completed).length, 0) : 0;
+                                        const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+                                        return (
+                                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                                <div>
+                                                    <div className="font-semibold text-gray-700">תוכנית {plan.planNumber || idx + 1}</div>
+                                                    <div className="text-sm text-gray-500">
+                                                        {plan.duration} שבועות · {plan.workoutsPerWeek} אימונים/שבוע
+                                                        {plan.archivedAt && ` · ${new Date(plan.archivedAt).toLocaleDateString('he-IL')}`}
+                                                    </div>
+                                                </div>
+                                                <span className={`text-sm font-bold ${pct >= 80 ? 'text-green-600' : 'text-gray-500'}`}>
+                                                    {pct}% הושלם
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                             <h2 className="text-xl font-bold text-gray-800 mb-4">צפייה לפי שבוע</h2>
