@@ -390,6 +390,27 @@
         imgEl.parentElement.insertBefore(ph, imgEl.nextSibling);
     }
 
+    // Cascading fallback: Claude imgUrl → loremflickr → emoji placeholder
+    function onImgError(img) {
+        if (!img.dataset.tried) {
+            img.dataset.tried = '1';
+            img.src = img.dataset.fallback;
+        } else {
+            imgError(img);
+        }
+    }
+
+    function onModalImgError(img) {
+        if (!img.dataset.tried) {
+            img.dataset.tried = '1';
+            img.src = img.dataset.fallback;
+        } else {
+            img.style.display = 'none';
+            const ph = document.getElementById('modal-ph');
+            if (ph) ph.style.display = 'flex';
+        }
+    }
+
     // ── URL sanitizer ─────────────────────────────────────────────
     function sanitizeUrl(url) {
         if (!url || typeof url !== 'string') return null;
@@ -423,17 +444,22 @@
         const f2     = product.f2 || (product.keyFeatures?.[1]) || '';
         const pro    = product.pro || (product.pros?.[0])   || '';
         const con    = product.con || (product.cons?.[0])   || '';
-        const imgKey = (product.nameEn || `${product.brand || ''} ${product.name || ''}`).trim().replace(/\s+/g, ',');
-        const imgUrl = `https://loremflickr.com/400/220/${encodeURIComponent(imgKey)}`;
-        const enc    = encodeURIComponent(JSON.stringify({...product, type}));
+        const imgKey     = (product.nameEn || `${product.brand || ''} ${product.name || ''}`).trim().replace(/\s+/g, ',');
+        const loremUrl   = `https://loremflickr.com/400/220/${encodeURIComponent(imgKey)}`;
+        const claudeImg  = sanitizeUrl(product.imgUrl);
+        const imgUrl     = claudeImg || loremUrl;
+        const wikiAttr   = (product.wikiTitle || '').replace(/"/g, '&quot;');
+        const enc        = encodeURIComponent(JSON.stringify({...product, type}));
 
         return `
         <div class="product-card ${cfg.cls} rounded-3xl shadow-lg" onclick="openModal(this)" data-product="${enc}">
             <!-- Image -->
             <div class="card-img-wrapper">
                 <img class="card-img" src="${imgUrl}" alt="${product.name || ''}" loading="lazy"
-                    data-wiki="${(product.wikiTitle || '').replace(/"/g, '&quot;')}"
-                    onerror="imgError(this,'${cfg.placeholderBg}','${cfg.emoji}')" />
+                    data-wiki="${wikiAttr}"
+                    data-fallback="${loremUrl}"
+                    ${claudeImg ? '' : 'data-tried="1"'}
+                    onerror="onImgError(this)" />
                 <div class="card-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
                 <div class="card-img-overlay"></div>
             </div>
@@ -497,16 +523,17 @@
         const f2     = data.f2 || (data.keyFeatures?.[1]) || '';
         const pro    = data.pro || (data.pros?.[0])   || '';
         const con    = data.con || (data.cons?.[0])   || '';
-        const imgKey = (data.nameEn || `${data.brand || ''} ${data.name || ''}`).trim().replace(/\s+/g, ',');
-        const imgUrl = `https://loremflickr.com/640/260/${encodeURIComponent(imgKey)}`;
+        const imgKey     = (data.nameEn || `${data.brand || ''} ${data.name || ''}`).trim().replace(/\s+/g, ',');
+        const loremUrl   = `https://loremflickr.com/640/260/${encodeURIComponent(imgKey)}`;
+        const claudeImg  = sanitizeUrl(data.imgUrl);
+        const imgUrl     = claudeImg || loremUrl;
+        const wikiAttr   = (data.wikiTitle || '').replace(/"/g, '&quot;');
 
-        // Buy links — prefer direct product links; use quoted search for exact model match
+        // Buy links: price-sorted, new products only, no second-hand
         const rawName = data.nameEn || `${data.brand || ''} ${data.name || ''}`;
         const qHe   = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
-        const qEn   = encodeURIComponent(rawName);
-        const qEnQ  = encodeURIComponent(`"${rawName}"`);  // quoted → exact match
+        const qEnQ  = encodeURIComponent(`"${rawName}"`);   // exact match with quotes
         const asin  = /^[A-Z0-9]{10}$/.test(data.asin || '') ? data.asin : null;
-        // Only use siteUrl if it's a specific product page (path depth ≥ 2)
         const rawSite = sanitizeUrl(data.siteUrl);
         const siteUrl = (() => {
             if (!rawSite) return null;
@@ -516,11 +543,10 @@
         const stores = [
             ...(siteUrl ? [{ name:'אתר המותג', icon:'🏪', bg:'#7c3aed', url:siteUrl, badge:'ישיר' }] : []),
             asin
-                ? { name:'Amazon', icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/dp/${asin}`, badge:'ישיר' }
-                : { name:'Amazon', icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/s?k=${qEnQ}` },
-            { name:'Google Shopping', icon:'🛍️', bg:'#2980b9', url:`https://www.google.com/search?tbm=shop&q=${qEnQ}&hl=iw` },
-            { name:'ZAP',             icon:'🔍', bg:'#c0392b', url:`https://www.zap.co.il/search.aspx?keyword=${qHe}` },
-            { name:'eBay',            icon:'🛒', bg:'#2271b1', url:`https://www.ebay.com/sch/i.html?_nkw=${qEnQ}` },
+                ? { name:'Amazon', icon:'📦', bg:'#ff9900', url:`https://www.amazon.co.il/dp/${asin}`, badge:'ישיר' }
+                : { name:'Amazon', icon:'📦', bg:'#ff9900', url:`https://www.amazon.co.il/s?k=${qEnQ}&s=price-asc-rank`, badge:'↓ מחיר' },
+            { name:'Google Shopping', icon:'🛍️', bg:'#4285f4', url:`https://www.google.com/search?tbm=shop&q=${qEnQ}&tbs=p_ord:p&hl=iw`, badge:'↓ מחיר' },
+            { name:'ZAP', icon:'💰', bg:'#e74c3c', url:`https://www.zap.co.il/search.aspx?keyword=${qHe}` },
         ];
         const buyHtml = stores.map(s =>
             `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="buy-btn" style="background:${s.bg}22;border-color:${s.bg}55;">
@@ -531,8 +557,10 @@
         document.getElementById('modalBox').innerHTML = `
             <div style="position:relative;">
                 <img src="${imgUrl}" class="modal-img" id="modal-main-img" alt="${data.name || ''}"
-                    data-wiki="${(data.wikiTitle || '').replace(/"/g, '&quot;')}"
-                    onerror="this.style.display='none';document.getElementById('modal-ph').style.display='flex'" />
+                    data-wiki="${wikiAttr}"
+                    data-fallback="${loremUrl}"
+                    ${claudeImg ? '' : 'data-tried="1"'}
+                    onerror="onModalImgError(this)" />
                 <div id="modal-ph" class="modal-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
                 <button onclick="closeModal()"
                     style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.55);border:none;color:white;border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);transition:background 0.15s ease;"
@@ -717,27 +745,30 @@ Rules: Hebrew only, author=Hebrew first name, text max 9 words, summary max 14 w
 
     // ── Claude API call ──────────────────────────────────────────
     async function callClaudeAPI(apiKey, productType) {
-        const systemPrompt = `You are a product expert. Return ONLY a valid JSON object. No markdown, no explanation.
+        const systemPrompt = `You are a product expert for the Israeli market. Return ONLY a valid JSON object. No markdown, no explanation.
 
-Return exactly 8 products (2 per category) for the given product type.
-ALL 4 categories MUST be present and filled: premium, durable, value, budget.
+IMPORTANT: Recommend ONLY products currently available NEW in stores (released 2022-2025). No discontinued, old, or second-hand products.
+
+Return exactly 8 products (2 per category). ALL 4 categories MUST be filled.
 
 JSON structure:
 {"searchSummary":"X","categories":{"premium":[P,P],"durable":[P,P],"value":[P,P],"budget":[P,P]}}
 
 Each product P must have ALL these exact fields:
-{"name":"שם עברי","brand":"Brand","nameEn":"Full English Model Name","price":"₪XXX","d":8,"q":8,"f1":"תכונה א","f2":"תכונה ב","pro":"יתרון","con":"חיסרון","wikiTitle":"Wikipedia Article Title","asin":"B0XXXXXXXXX","siteUrl":"https://brand.com/specific/product/page"}
+{"name":"Model Name","brand":"Brand","nameEn":"Nike Air Max 90","price":"₪XXX","d":8,"q":8,"f1":"תכונה א","f2":"תכונה ב","pro":"יתרון","con":"חיסרון","wikiTitle":"Nike Air Max 90","imgUrl":"https://cdn.brand.com/product.jpg","asin":"B0XXXXXXXXX","siteUrl":"https://brand.com/il/product/exact-path"}
 
 Field rules:
-- name, f1, f2, pro, con: Hebrew, max 4 words each
+- name: EXACT product model name (e.g. "Air Max 90", "Ultraboost 22") — NOT a generic description like "running shoe" or "נעלי ריצה"
 - brand: English brand name
-- nameEn: complete English model name used for searching (e.g. "Nike Air Zoom Pegasus 40")
-- price: format "₪XXX-XXX"
+- nameEn: full searchable English model name (e.g. "Nike Air Max 90 Men 2024")
+- price: current Israeli market price "₪XXX-XXX"
 - d, q: integers 1-10
-- wikiTitle: English Wikipedia article title for this exact product (e.g. "Nike Air Max 90"), used to load product image
-- asin: Amazon ASIN (exactly 10 alphanumeric chars). Include ONLY if you are 100% certain it is correct for this specific product.
-- siteUrl: SPECIFIC product page URL with full product path (e.g. "https://www.nike.com/il/t/air-max-90/CZ5594-001"). Do NOT use brand homepage. Include only if you know the exact URL.
-- searchSummary: Hebrew summary, max 5 words`;
+- f1, f2, pro, con: Hebrew, max 4 words
+- wikiTitle: English Wikipedia article title for this product model, for image loading
+- imgUrl: real direct image URL of this exact product from brand CDN or retailer (https, ends in .jpg/.png/.webp). Use the actual product image, not a placeholder.
+- asin: Amazon ASIN (10 alphanumeric chars). ONLY if 100% certain it is correct for this exact product.
+- siteUrl: direct product page URL (NOT brand homepage). ONLY if you know the exact URL.
+- searchSummary: Hebrew, max 5 words`;
 
         const response = await fetch(API_URL, {
             method: 'POST',
