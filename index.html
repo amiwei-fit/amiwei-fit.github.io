@@ -426,7 +426,7 @@
             const isMuscleBuilding = goals.includes('עלייה במסת שריר');
 
             if (isMuscleBuilding) {
-                return generateMuscleBuildingWorkout(muscleGroups, level, workoutDuration, availableEquipment, sessionNum, strengthExperience, customInstructions);
+                return generateMuscleBuildingWorkout(muscleGroups, level, workoutDuration, availableEquipment, sessionNum, strengthExperience, customInstructions, weekNum);
             }
 
             // Default general fitness workout
@@ -693,7 +693,7 @@
         };
 
         // Professional muscle building workout based on equipment and muscle groups
-        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '', customInstructions = '') => {
+        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '', customInstructions = '', weekNum = 1) => {
             // Beginners (by level OR experience): always use FBW with progressive sets
             const isBeginnerLevel = strengthExperience === 'beginner' || level === 'מתחיל';
             if (isBeginnerLevel) {
@@ -705,7 +705,13 @@
             const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
             const hasPullupBar = availableEquipment.includes('מתח, מקבילים');
             const bodyweightOnly = availableEquipment.includes('משקל גוף בלבד') && !hasDumbbells && !hasGym;
-            
+
+            // 4-week rotation: every 4 weeks, 2 key exercises swap
+            // Even blocks (weeks 1-4, 9-12...): squat is primary leg compound
+            // Odd blocks (weeks 5-8, 13-16...): deadlift is primary leg compound
+            const fourWeekBlock = Math.floor((weekNum - 1) / 4);
+            const primaryLegIsDeadlift = fourWeekBlock % 2 === 1;
+
             let exercises = [];
             
             // Define exercises by muscle group and equipment
@@ -931,6 +937,20 @@
                         ]
                     ];
                     exercises = gymVariations[variationIndex];
+                    // 4-week rotation: swap 2 exercises per block
+                    // Swap 1: leg compound (squat ↔ deadlift)
+                    // Swap 2: chest compound (flat bench ↔ incline bench)
+                    exercises = exercises.map(ex => {
+                        if (primaryLegIsDeadlift && ex.name === 'סקוואט עם מוט (Barbell Back Squat)')
+                            return { ...ex, name: 'דד-ליפט (Deadlift)', reps: '6-8', rest: 150, notes: 'מלך התרגילים. שרשרת אחורית.' };
+                        if (!primaryLegIsDeadlift && ex.name === 'Deadlift (דד-ליפט)')
+                            return { ...ex, name: 'סקוואט עם מוט (Barbell Back Squat)', reps: '8-10', rest: 120, notes: 'תרגיל טכני ראשון. שרשרת קדמית.' };
+                        if (primaryLegIsDeadlift && ex.name === 'לחיצת חזה בשכיבה עם מוט (Bench Press)')
+                            return { ...ex, name: 'בשכיבה משופעת לחיצת חזה עם מוט (Incline Bench Press)', reps: '10-12', rest: 90, notes: 'חזה עליון.' };
+                        if (!primaryLegIsDeadlift && ex.name === 'לחיצת חזה בשכיבה משופעת (Incline Bench)')
+                            return { ...ex, name: 'לחיצת חזה בשכיבה עם מוט (Bench Press)', reps: '8-10', rest: 120, notes: 'חזה, כתפיים, טריצפס.' };
+                        return ex;
+                    });
                 } else if (hasDumbbells) {
                     const dumbVariations = [
                         [
@@ -966,6 +986,14 @@
                         ]
                     ];
                     exercises = dumbVariations[variationIndex];
+                    // 4-week rotation: swap goblet squat ↔ dumbbell deadlift
+                    exercises = exercises.map(ex => {
+                        if (primaryLegIsDeadlift && ex.name === 'גובלט סקוואט (Goblet Squat)')
+                            return { ...ex, name: 'דד-ליפט עם משקוליות יד (Dumbbell Deadlift)', reps: '8-10', rest: 120, notes: 'שרשרת אחורית.' };
+                        if (!primaryLegIsDeadlift && ex.name === 'Deadlift עם משקוליות יד')
+                            return { ...ex, name: 'גובלט סקוואט (Goblet Squat)', reps: '12-15', rest: 90, notes: 'שרשרת קדמית.' };
+                        return ex;
+                    });
                 } else {
                     // Calisthenics / bodyweight - based on XLSX (full body bodyweight XLSX)
                     const bwVariations = [
@@ -1011,9 +1039,49 @@
                         } else {
                             exercises.push(...exerciseLibrary['בטן'].all.slice(0, 3));
                         }
+                    } else if (group === 'רגליים') {
+                        // Legs: squat or deadlift is ALWAYS the first exercise (4-week rotation).
+                        // Secondary exercises are added only if workout duration allows.
+                        const workoutMin = parseInt(workoutDuration) || 60;
+                        if (hasGym || hasDumbbells) {
+                            // Primary compound - rotates every 4 weeks
+                            exercises.push(primaryLegIsDeadlift
+                                ? { name: 'דד-ליפט (Deadlift)', sets: setsLarge, reps: '6-8', rest: 150, notes: 'מלך התרגילים. שרשרת אחורית.' }
+                                : (hasGym
+                                    ? { name: 'סקוואט עם מוט (Barbell Squat)', sets: setsLarge, reps: '8-10', rest: 120, notes: 'תרגיל טכני ראשון. שרשרת קדמית.' }
+                                    : { name: 'גובלט סקוואט (Goblet Squat)', sets: setsLarge, reps: '12-15', rest: 90, notes: 'שרשרת קדמית.' })
+                            );
+                            // 2nd exercise only if ≥45 min
+                            if (workoutMin >= 45) exercises.push(primaryLegIsDeadlift
+                                ? (hasGym ? { name: 'לחיצת רגליים במכונה (Leg Press)', sets: setsSmall, reps: '12-15', rest: 90, notes: 'Quad.' }
+                                          : { name: 'גובלט סקוואט (Goblet Squat)', sets: setsSmall, reps: '12-15', rest: 90, notes: 'Quad.' })
+                                : (hasGym ? { name: 'בשכיבה כפיפת ברכיים (Leg Curl)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'המסטרינג.' }
+                                          : { name: 'רומניאן דד-ליפט עם דמבלים', sets: setsSmall, reps: '10-12', rest: 90, notes: 'המסטרינג וגלוטס.' })
+                            );
+                            // 3rd exercise only if ≥60 min
+                            if (workoutMin >= 60) exercises.push(hasGym
+                                ? { name: "מכרע עם מוט (Barbell Lunge)", sets: setsSmall, reps: '10-12 לכל רגל', rest: 60, notes: 'שרשרת קדמית.' }
+                                : { name: "לאנג'ים עם דמבלים (Dumbbell Lunge)", sets: setsSmall, reps: '10-12 לכל רגל', rest: 90, notes: 'חד-צדדי.' }
+                            );
+                            // 4th exercise only if ≥75 min - also rotates with block
+                            if (workoutMin >= 75) exercises.push(hasGym
+                                ? (primaryLegIsDeadlift
+                                    ? { name: 'בישיבה פשיטת ברכיים (Leg Extension)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'Quad - בידוד.' }
+                                    : { name: 'רומניאן דד-ליפט (Romanian Deadlift)', sets: setsSmall, reps: '10-12', rest: 90, notes: 'שרשרת אחורית.' })
+                                : { name: 'בולגריאן ספליט סקוואט', sets: setsSmall, reps: '10 לכל רגל', rest: 90, notes: 'חד-צדדי מתקדם.' }
+                            );
+                        } else {
+                            // Bodyweight legs
+                            exercises.push(primaryLegIsDeadlift
+                                ? { name: 'רומניאן דד-ליפט חד-רגלי (Single Leg Deadlift)', sets: setsLarge, reps: '8 לכל רגל', rest: 90, notes: 'שרשרת אחורית + שיווי משקל.' }
+                                : { name: 'סקוואט עמוק (Deep Squat)', sets: setsLarge, reps: '15-20', rest: 60, notes: 'טווח תנועה מלא.' }
+                            );
+                            if (workoutMin >= 45) exercises.push({ name: "לאנג'ים הליכה (Walking Lunge)", sets: setsSmall, reps: '15 לכל רגל', rest: 60, notes: 'שרשרת קדמית.' });
+                            if (workoutMin >= 60) exercises.push({ name: 'Hip Thrust', sets: setsSmall, reps: '15-20', rest: 60, notes: 'גלוטס.' });
+                        }
                     } else if (exerciseLibrary[group]) {
                         let groupExercises;
-                        
+
                         // Priority: TRX > Gym > Dumbbells > Bodyweight
                         if (hasTRX && exerciseLibrary[group].trx) {
                             groupExercises = exerciseLibrary[group].trx;
@@ -1024,7 +1092,7 @@
                         } else {
                             groupExercises = exerciseLibrary[group].bodyweight || exerciseLibrary[group].all || [];
                         }
-                        
+
                         const count = level === 'מתקדם' ? 4 : 3;
                         exercises.push(...groupExercises.slice(0, count));
                     }
