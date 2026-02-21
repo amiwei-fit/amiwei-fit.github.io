@@ -400,8 +400,8 @@
         const f2     = product.f2 || (product.keyFeatures?.[1]) || '';
         const pro    = product.pro || (product.pros?.[0])   || '';
         const con    = product.con || (product.cons?.[0])   || '';
-        const imgKey = product.img || `${product.brand || ''} ${product.name || ''}`;
-        const imgUrl = `https://source.unsplash.com/400x220/?${encodeURIComponent(imgKey)}`;
+        const imgKey = (product.img || `${product.brand || ''} ${product.name || ''}`).trim().replace(/\s+/g, ',');
+        const imgUrl = `https://loremflickr.com/400/220/${encodeURIComponent(imgKey)}`;
         const enc    = encodeURIComponent(JSON.stringify({...product, type}));
 
         return `
@@ -473,8 +473,8 @@
         const f2     = data.f2 || (data.keyFeatures?.[1]) || '';
         const pro    = data.pro || (data.pros?.[0])   || '';
         const con    = data.con || (data.cons?.[0])   || '';
-        const imgKey = data.img || `${data.brand || ''} ${data.name || ''}`;
-        const imgUrl = `https://source.unsplash.com/640x260/?${encodeURIComponent(imgKey)}`;
+        const imgKey = (data.img || `${data.brand || ''} ${data.name || ''}`).trim().replace(/\s+/g, ',');
+        const imgUrl = `https://loremflickr.com/640/260/${encodeURIComponent(imgKey)}`;
 
         // Buy links — generated client-side
         const q = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
