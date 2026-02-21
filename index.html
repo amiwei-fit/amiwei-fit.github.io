@@ -368,46 +368,61 @@
                         workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null, phase: phase.name };
 
                     } else if (hasAerobicGoal) {
-                        // Determine if this day is a strength day
-                        let isStrengthDay = false;
-                        let isShortStrength = false; // 15-min appended, vs full session
-                        if      (workoutsPerWeek <= 3) { isStrengthDay = (day === 1); isShortStrength = true; }
-                        else if (workoutsPerWeek === 4) { isStrengthDay = (day === 2); }
-                        else                            { isStrengthDay = (day === 2 || day === 5); }
-
-                        // Taper: no separate strength days in last 15% of plan
-                        if (phase.key === 'taper') { isStrengthDay = false; isShortStrength = false; }
-
-                        if (isStrengthDay && isShortStrength) {
-                            // Running + short runner strength appended
-                            const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
-                            const strengthExercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '15');
+                        // Every session = run + strength at the end (no separate strength days)
+                        const runningExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
+                        if (phase.key === 'taper') {
+                            // Taper weeks: pure running, no strength
+                            workout = { day, type: 'ריצה', exercises: runningExercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
+                        } else {
+                            // All other weeks: running + runner strength appended
+                            const strengthMins = workoutsPerWeek <= 3 ? '15' : '20';
+                            const strengthExercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], strengthMins);
                             workout = {
                                 day, type: 'ריצה + חיזוק',
                                 exercises: [
                                     ...runningExercises,
-                                    { name: '━━━ חיזוק לרצים (10-15 דקות) ━━━', sets: 0, reps: '', rest: 0, notes: 'מעבר לתרגילי חיזוק' },
+                                    { name: `━━━ חיזוק לרצים (${strengthMins} דקות) ━━━`, sets: 0, reps: '', rest: 0, notes: 'מעבר לתרגילי חיזוק' },
                                     ...strengthExercises
                                 ],
                                 completed: false, feedback: null, difficulty: null, phase: phase.name
                             };
-                        } else if (isStrengthDay) {
-                            const exercises = generateRunnerStrengthWorkout(activityLevel, userData.availableEquipment || [], '40');
-                            workout = { day, type: 'כוח לרצים', exercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
-                        } else {
-                            const exercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier, enrichedCardioTarget, week, runningDuration, duration, phase, runningSessionIdx++);
-                            workout = { day, type: 'ריצה', exercises, completed: false, feedback: null, difficulty: null, phase: phase.name };
                         }
 
                     } else {
-                        if (day % 2 === 1) {
-                            const sessionNum = (week - 1) * workoutsPerWeek + day;
-                            const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, muscleGroups, workoutDuration, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '', systemPromptText);
-                            const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
-                            workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null };
-                        } else {
+                        const isGeneralHealth = goals.includes('שיפור בריאות כללית');
+                        const sessionNum = (week - 1) * workoutsPerWeek + day;
+
+                        if (isGeneralHealth) {
+                            // Every workout = strength first + cardio at the end
+                            const totalMin = parseInt(workoutDuration) || 60;
+                            const strengthMin = Math.round(totalMin * 0.6).toString();
+                            const cardioMin   = Math.round(totalMin * 0.4).toString();
+
+                            const strengthExercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, muscleGroups, strengthMin, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '', systemPromptText);
+                            const exercisesWithWeights = addWeightRecommendations(strengthExercises, userData, week);
+
                             const cardioWorkoutType = forcedCardioType || 'אירובי';
-                            workout = { day, type: cardioWorkoutType, exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, cardioTarget, week, workoutDuration, 12, { name: 'בסיס', key: 'base' }, 0, forcedCardioType), completed: false, feedback: null, difficulty: null };
+                            const cardioExercises = generateCardioWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, cardioTarget, week, cardioMin, 12, { name: 'בסיס', key: 'base' }, 0, forcedCardioType);
+
+                            workout = {
+                                day, type: 'כוח + אירובי',
+                                exercises: [
+                                    ...exercisesWithWeights,
+                                    { name: `━━━ חלק אירובי (${cardioMin} דקות) ━━━`, sets: 0, reps: '', rest: 0, notes: 'מעבר לאימון אירובי' },
+                                    ...cardioExercises
+                                ],
+                                completed: false, feedback: null, difficulty: null
+                            };
+                        } else {
+                            // Weight loss / other goals: alternating strength / cardio days
+                            if (day % 2 === 1) {
+                                const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, muscleGroups, workoutDuration, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '', systemPromptText);
+                                const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
+                                workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null };
+                            } else {
+                                const cardioWorkoutType = forcedCardioType || 'אירובי';
+                                workout = { day, type: cardioWorkoutType, exercises: generateCardioWorkout(goals, activityLevel, intensityMultiplier * intensityModifier, cardioTarget, week, workoutDuration, 12, { name: 'בסיס', key: 'base' }, 0, forcedCardioType), completed: false, feedback: null, difficulty: null };
+                            }
                         }
                     }
 
@@ -2232,8 +2247,9 @@
                 }
             };
 
-            const handleRegeneratePlan = () => {
-                const workoutPlan = generateWorkoutPlan(formData);
+            const handleRegeneratePlan = (systemPrompt) => {
+                const updatedFormData = { ...formData, _systemPrompt: systemPrompt || formData.customInstructions || '' };
+                const workoutPlan = generateWorkoutPlan(updatedFormData);
                 setGeneratedPlan(workoutPlan);
             };
 
