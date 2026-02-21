@@ -390,7 +390,30 @@
         imgEl.parentElement.insertBefore(ph, imgEl.nextSibling);
     }
 
-    // ── Card renderer ────────────────────────────────────────────
+    // ── URL sanitizer ─────────────────────────────────────────────
+    function sanitizeUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        try {
+            const u = new URL(url.trim());
+            if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+            return url.trim().replace(/['"<>]/g, '');
+        } catch { return null; }
+    }
+
+    // ── Wikipedia image loader (async, updates cards after render) ─
+    async function loadWikiImages() {
+        const imgs = [...document.querySelectorAll('img[data-wiki]')].filter(i => i.dataset.wiki);
+        await Promise.all(imgs.map(async img => {
+            try {
+                const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(img.dataset.wiki)}`);
+                if (!res.ok) return;
+                const d = await res.json();
+                if (d.thumbnail?.source) img.src = d.thumbnail.source;
+            } catch {}
+        }));
+    }
+
+    // ── Card renderer ─────────────────────────────────────────────
     function renderCard(product, type) {
         const cfg    = TYPE_CFG[type];
         const dScore = product.d ?? product.durabilityScore ?? 0;
@@ -409,6 +432,7 @@
             <!-- Image -->
             <div class="card-img-wrapper">
                 <img class="card-img" src="${imgUrl}" alt="${product.name || ''}" loading="lazy"
+                    data-wiki="${(product.wikiTitle || '').replace(/"/g, '&quot;')}"
                     onerror="imgError(this,'${cfg.placeholderBg}','${cfg.emoji}')" />
                 <div class="card-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
                 <div class="card-img-overlay"></div>
@@ -476,23 +500,30 @@
         const imgKey = (data.nameEn || `${data.brand || ''} ${data.name || ''}`).trim().replace(/\s+/g, ',');
         const imgUrl = `https://loremflickr.com/640/260/${encodeURIComponent(imgKey)}`;
 
-        // Buy links — use English name for more accurate results
-        const qHe = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
-        const qEn = encodeURIComponent(data.nameEn || `${data.brand || ''} ${data.name || ''}`);
+        // Buy links — prefer direct product links when available
+        const qHe  = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
+        const qEn  = encodeURIComponent(data.nameEn || `${data.brand || ''} ${data.name || ''}`);
+        const asin = /^[A-Z0-9]{10}$/.test(data.asin || '') ? data.asin : null;
+        const siteUrl = sanitizeUrl(data.siteUrl);
         const stores = [
-            { name:'ZAP',             icon:'🔍', bg:'#c0392b', url:`https://www.zap.co.il/search.aspx?keyword=${qHe}` },
-            { name:'אמזון',           icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/s?k=${qEn}` },
+            ...(siteUrl ? [{ name:'אתר המותג', icon:'🏪', bg:'#7c3aed', url:siteUrl, badge:'ישיר' }] : []),
+            asin
+                ? { name:'Amazon', icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/dp/${asin}`, badge:'ישיר' }
+                : { name:'Amazon', icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/s?k=${qEn}` },
             { name:'Google Shopping', icon:'🛍️', bg:'#2980b9', url:`https://www.google.com/search?tbm=shop&q=${qEn}&hl=iw` },
+            { name:'ZAP',             icon:'🔍', bg:'#c0392b', url:`https://www.zap.co.il/search.aspx?keyword=${qHe}` },
             { name:'eBay',            icon:'🛒', bg:'#2271b1', url:`https://www.ebay.com/sch/i.html?_nkw=${qEn}` },
-            { name:'AliExpress',      icon:'✈️', bg:'#c0392b', url:`https://www.aliexpress.com/wholesale?SearchText=${qEn}` },
         ];
         const buyHtml = stores.map(s =>
-            `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="buy-btn" style="background:${s.bg}22;border-color:${s.bg}55;">${s.icon} ${s.name}</a>`
+            `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="buy-btn" style="background:${s.bg}22;border-color:${s.bg}55;">
+                ${s.icon} ${s.name}${s.badge ? ` <span style="font-size:9px;background:${s.bg};color:#fff;border-radius:4px;padding:1px 5px;margin-right:3px;">${s.badge}</span>` : ''}
+            </a>`
         ).join('');
 
         document.getElementById('modalBox').innerHTML = `
             <div style="position:relative;">
-                <img src="${imgUrl}" class="modal-img" alt="${data.name || ''}"
+                <img src="${imgUrl}" class="modal-img" id="modal-main-img" alt="${data.name || ''}"
+                    data-wiki="${(data.wikiTitle || '').replace(/"/g, '&quot;')}"
                     onerror="this.style.display='none';document.getElementById('modal-ph').style.display='flex'" />
                 <div id="modal-ph" class="modal-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
                 <button onclick="closeModal()"
@@ -565,6 +596,7 @@
         document.getElementById('modalOverlay').style.display = 'flex';
         document.body.style.overflow = 'hidden';
         loadReviews(data);
+        loadWikiImages();
     }
 
     function closeModal() {
@@ -679,14 +711,17 @@ Rules: Hebrew only, author=Hebrew first name, text max 9 words, summary max 14 w
     async function callClaudeAPI(apiKey, productType) {
         const systemPrompt = `You are a product expert. Return ONLY a raw JSON object. No markdown. No explanation.
 
-Exact schema - 2 products per category, Hebrew values, concise:
-{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","nameEn":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X"}],"durable":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"}],"value":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":7,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","nameEn":"X","price":"X","d":7,"q":7,"f1":"X","f2":"X","pro":"X","con":"X"}],"budget":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":6,"q":6,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","nameEn":"X","price":"X","d":5,"q":6,"f1":"X","f2":"X","pro":"X","con":"X"}]}}
+Exact schema - 2 products per category:
+{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","wikiTitle":"X","asin":"B0XXXXXXXXX","siteUrl":"https://..."},{"name":"X","brand":"X","nameEn":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","wikiTitle":"X","asin":"B0XXXXXXXXX","siteUrl":"https://..."}],"durable":[...],"value":[...],"budget":[...]}}
 
 Rules:
 - name, brand, f1, f2, pro, con: max 4 Hebrew words
 - price: ILS like "₪200-300"
 - d=durability 1-10, q=quality 1-10
-- nameEn: full English product model name for search queries (e.g. "Nike Air Zoom Pegasus 40")
+- nameEn: full English product model name (e.g. "Nike Air Zoom Pegasus 40")
+- wikiTitle: Wikipedia article title for this exact product (e.g. "Nike Air Max 90") — used to load the product image. If unsure, use brand + model.
+- asin: Amazon ASIN if known (exactly 10 alphanumeric chars, e.g. "B09XY12345"). Omit if unknown.
+- siteUrl: official brand product page URL (https only, e.g. "https://www.nike.com/il/t/air-max-90/..."). Omit if unknown.
 - searchSummary: max 5 Hebrew words`;
 
         const response = await fetch(API_URL, {
@@ -736,6 +771,7 @@ Rules:
 
         document.getElementById('resultsSection').style.display = 'block';
         document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        loadWikiImages();
     }
 
     // ── Init ────────────────────────────────────────────────────
