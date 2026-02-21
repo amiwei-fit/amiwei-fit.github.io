@@ -306,18 +306,24 @@
             if (userData.planWeeks && parseInt(userData.planWeeks) > 0) {
                 duration = parseInt(userData.planWeeks);
             } else if (systemPromptText) {
-                // Parse weeks from free-text instructions
-                // Handles: "8 שבועות", "תוכנית של 12 שבועות", "שבוע 1", "שבועות 6"
-                const weeksMatch = systemPromptText.match(/(\d+)\s*שבועות?/) ||
-                                   systemPromptText.match(/שבועות?\s+(\d+)/);
+                // Parse weeks from free-text instructions.
+                // Handles: "8 שבועות", "1 שבוע", "שבוע 1", "שבועות 6", "שבועיים"
+                const weeksMatch =
+                    systemPromptText.match(/(\d+)\s*(?:שבועות|שבוע)/) ||   // "4 שבועות" / "1 שבוע"
+                    systemPromptText.match(/(?:שבועות|שבוע)\s+(\d+)/);      // "שבוע 1" / "שבועות 6"
                 if (weeksMatch) {
                     duration = parseInt(weeksMatch[1]);
+                } else if (systemPromptText.includes('שבועיים')) {
+                    duration = 2; // "שבועיים" = 2 weeks
                 }
             }
 
-            // Parse workouts-per-week override from free-text instructions ("2 אימונים בשבוע")
+            // Parse workouts-per-week override from free-text instructions
+            // Handles: "2 אימונים בשבוע", "3 פעמים בשבוע", "אימון 4 פעמים בשבוע"
             if (systemPromptText) {
-                const wkMatch = systemPromptText.match(/(\d+)\s*אימונים?\s*בשבוע/);
+                const wkMatch =
+                    systemPromptText.match(/(\d+)\s*(?:אימונים?|פעמים?)\s*בשבוע/) ||
+                    systemPromptText.match(/(?:אימונים?|פעמים?)\s*(\d+)\s*בשבוע/);
                 if (wkMatch) workoutsPerWeek = parseInt(wkMatch[1]);
             }
 
@@ -1157,7 +1163,7 @@
                       getEx: () => ({ name: 'רומניאן דד-ליפט (Romanian Deadlift)', sets: 4, reps: '10-12', rest: 90, notes: 'המסטרינג וגלוטס.' }) },
                     { kw: ['דד-ליפט', 'deadlift', 'dead lift'],
                       getEx: () => ({ name: 'דד-ליפט (Deadlift)', sets: 4, reps: '6-8', rest: 150, notes: 'כל הגוף. שרשרת אחורית.' }) },
-                    { kw: ['סקוואט', 'squat'],
+                    { kw: ['סקוואט', 'סקווט', 'squat'],
                       getEx: () => ({ name: 'סקוואט (Squat)', sets: 4, reps: '8-12', rest: 120, notes: 'שרשרת קדמית.' }) },
                     { kw: ["לאנג'ים", 'לאנגים', 'lunges', 'lunge'],
                       getEx: () => ({ name: "לאנג'ים (Lunges)", sets: 4, reps: '12 לכל רגל', rest: 60, notes: 'שרשרת קדמית.' }) },
@@ -1298,7 +1304,7 @@
                       getEx: () => ({ name: 'רומניאן דד-ליפט (Romanian Deadlift)', sets: 3, reps: '10-12', rest: 90, notes: 'המסטרינג וגלוטס.' }) },
                     { kw: ['דד-ליפט', 'deadlift', 'dead lift'],
                       getEx: () => ({ name: 'דד-ליפט (Deadlift)', sets: 3, reps: '8-10', rest: 120, notes: 'כל הגוף. שרשרת אחורית.' }) },
-                    { kw: ['סקוואט', 'squat'],
+                    { kw: ['סקוואט', 'סקווט', 'squat'],
                       getEx: () => ({ name: 'סקוואט (Squat)', sets: 3, reps: '12-15', rest: 90, notes: 'שרשרת קדמית.' }) },
                     { kw: ["לאנג'ים", 'לאנגים', 'lunges', 'lunge'],
                       getEx: () => ({ name: "לאנג'ים (Lunges)", sets: 3, reps: '12 לכל רגל', rest: 60, notes: 'שרשרת קדמית.' }) },
