@@ -1040,60 +1040,111 @@
                 exercises.splice(0, kettlebellCount, ...kettlebellExercises);
             }
             
-            // Inject specifically requested exercises from customInstructions
+            // Parse free-text instructions: inject requested exercises, remove excluded ones.
+            // This is a general keyword engine - it is NOT limited to specific exercises.
+            // Any exercise written in customInstructions will be detected and added.
             if (customInstructions) {
-                const injected = [];
+                // Comprehensive exercise keyword map (Hebrew + English).
+                // Each entry: kw = keywords to detect, getEx = returns the exercise object.
+                // Order matters for overlapping keywords (more specific → earlier in list).
+                const exKeywordMap = [
+                    // Upper body – pull
+                    { kw: ['עליות מתח', 'pull-up', 'pullup', 'chin-up'],
+                      getEx: (txt) => {
+                          const m = txt.match(/מקסימום\s*(\d+)/);
+                          const cm = m ? parseInt(m[1]) : null;
+                          return { name: 'עליות מתח (Pull-ups)', sets: 4,
+                              reps: cm ? `${Math.max(6,Math.round(cm*0.7))}-${Math.round(cm*0.85)}` : 'מקסימום',
+                              rest: 120, notes: cm ? `גב וביצפס. מקסימום נוכחי: ${cm}. עבוד ב-70-85%.` : 'גב וביצפס.' };
+                      } },
+                    { kw: ['חתירה', 'bent over row', 'barbell row', 'rowing'],
+                      getEx: () => ({ name: 'חתירה בהטיית גו (Bent Over Row)', sets: 4, reps: '10-12', rest: 90, notes: 'גב.' }) },
+                    // Upper body – push
+                    { kw: ['מקבילים', 'parallel bar dips'],
+                      getEx: () => ({ name: 'מקבילים (Parallel Bar Dips)', sets: 4, reps: '10-15', rest: 90, notes: 'חזה תחתון + טריצפס. נטייה קדימה לחזה, גוף זקוף לטריצפס.' }) },
+                    { kw: ['בנץ', 'bench press', 'bench', 'לחיצת חזה'],
+                      getEx: (txt) => {
+                          const isDumb = txt.includes('משקולות') || txt.includes('דמבל') || txt.toLowerCase().includes('dumbbell');
+                          return isDumb
+                              ? { name: 'לחיצת חזה בשכיבה עם משקוליות יד (Dumbbell Bench Press)', sets: 4, reps: '10-12', rest: 90, notes: 'חזה.' }
+                              : { name: 'לחיצת חזה בשכיבה עם מוט (Flat Bench Press)', sets: 4, reps: '8-10', rest: 120, notes: 'חזה, כתפיים, טריצפס.' };
+                      } },
+                    { kw: ['שכיבות סמיכה', 'push-up', 'pushup'],
+                      getEx: () => ({ name: 'שכיבות סמיכה (Push-ups)', sets: 4, reps: '15-20', rest: 60, notes: 'חזה, כתפיים, טריצפס.' }) },
+                    // Legs
+                    { kw: ['רומניאן', 'romanian deadlift', 'rdl'],
+                      getEx: () => ({ name: 'רומניאן דד-ליפט (Romanian Deadlift)', sets: 4, reps: '10-12', rest: 90, notes: 'המסטרינג וגלוטס.' }) },
+                    { kw: ['דד-ליפט', 'deadlift', 'dead lift'],
+                      getEx: () => ({ name: 'דד-ליפט (Deadlift)', sets: 4, reps: '6-8', rest: 150, notes: 'כל הגוף. שרשרת אחורית.' }) },
+                    { kw: ['סקוואט', 'squat'],
+                      getEx: () => ({ name: 'סקוואט (Squat)', sets: 4, reps: '8-12', rest: 120, notes: 'שרשרת קדמית.' }) },
+                    { kw: ["לאנג'ים", 'לאנגים', 'lunges', 'lunge'],
+                      getEx: () => ({ name: "לאנג'ים (Lunges)", sets: 4, reps: '12 לכל רגל', rest: 60, notes: 'שרשרת קדמית.' }) },
+                    { kw: ['לחיצת רגליים', 'leg press'],
+                      getEx: () => ({ name: 'לחיצת רגליים במכונה (Leg Press)', sets: 4, reps: '12-15', rest: 90, notes: 'Quad.' }) },
+                    { kw: ['כפיפת ברכיים', 'leg curl'],
+                      getEx: () => ({ name: 'כפיפת ברכיים במכונה (Leg Curl)', sets: 3, reps: '12-15', rest: 60, notes: 'המסטרינג.' }) },
+                    // Shoulders
+                    { kw: ['לחיצת כתפיים', 'overhead press', 'shoulder press', 'ohp', 'military press'],
+                      getEx: () => ({ name: 'לחיצת כתפיים (Overhead Press)', sets: 4, reps: '10-12', rest: 90, notes: 'כתפיים.' }) },
+                    { kw: ['הרחקה לצד', 'הרחקת כתפיים', 'lateral raise'],
+                      getEx: () => ({ name: 'הרחקת כתפיים לצד (Lateral Raise)', sets: 4, reps: '12-15', rest: 60, notes: 'כתפיים - ראש לטרלי.' }) },
+                    // Arms
+                    { kw: ['כפיפת מרפקים', 'bicep curl', 'bicep curls'],
+                      getEx: () => ({ name: 'כפיפת מרפקים (Bicep Curls)', sets: 4, reps: '10-12', rest: 60, notes: 'ביצפס.' }) },
+                    { kw: ['פשיטת מרפקים', 'tricep extension', 'triceps pushdown'],
+                      getEx: () => ({ name: 'פשיטת מרפקים בפולי (Triceps Pushdown)', sets: 4, reps: '12-15', rest: 60, notes: 'טריצפס.' }) },
+                    // Core
+                    { kw: ['פלאנק', 'plank'],
+                      getEx: () => ({ name: 'פלאנק', sets: 3, duration: '60 שניות', rest: 60, notes: 'ליבה.' }) },
+                    { kw: ['כפיפות בטן', 'crunches'],
+                      getEx: () => ({ name: 'כפיפות בטן (Crunches)', sets: 3, reps: '20', rest: 45, notes: 'בטן קדמית.' }) },
+                    // Kettlebell
+                    { kw: ['קטלבל', 'kettlebell'],
+                      getEx: () => ({ name: 'Kettlebell Swing', sets: 4, reps: '15-20', rest: 90, notes: 'Full Body - המסטרינג, גלוטס, כתף, גב.' }) },
+                ];
 
-                // Pull-ups (עליות מתח)
-                if (customInstructions.includes('עליות מתח') || customInstructions.includes('pull-up') || customInstructions.includes('pullup')) {
-                    const maxMatch = customInstructions.match(/מקסימום\s*(\d+)/);
-                    const currentMax = maxMatch ? parseInt(maxMatch[1]) : null;
-                    const reps = currentMax
-                        ? `${Math.max(6, Math.round(currentMax * 0.7))}-${Math.round(currentMax * 0.85)}`
-                        : 'מקסימום';
-                    injected.push({
-                        name: 'עליות מתח (Pull-ups)',
-                        sets: 4,
-                        reps,
-                        rest: 120,
-                        notes: `גב וביצפס.${currentMax ? ` מקסימום נוכחי: ${currentMax}. עבוד ב-70-85% - איכות על כמות.` : ' אחיזה רחבה לגב, צרה לביצפס.'}`
-                    });
-                }
+                // Exclusion prefixes – if one of these precedes a keyword, REMOVE that exercise
+                const exclPrefixes = ['בלי ', 'ללא ', 'הסר ', 'הוצא ', 'אל תכלול ', 'אל תוסיף '];
 
-                // Parallel bars / dips (מקבילים)
-                if (customInstructions.includes('מקבילים')) {
-                    injected.push({
-                        name: 'מקבילים (Parallel Bar Dips)',
-                        sets: 4,
-                        reps: '10-15',
-                        rest: 90,
-                        notes: 'חזה תחתון + טריצפס. נטייה קדימה לדגש חזה, גוף זקוף לדגש טריצפס.'
-                    });
-                }
+                const toInject   = []; // { kw, ex } – exercises to prepend
+                const toExclKw   = []; // keywords whose exercises should be removed
 
-                // Dumbbell bench press (בנץ' פרס / לחיצת חזה עם משקולות יד)
-                if (customInstructions.includes('בנץ') || (customInstructions.includes('לחיצת חזה') && customInstructions.includes('משקולות'))) {
-                    injected.push({
-                        name: 'לחיצת חזה בשכיבה עם משקוליות יד (Dumbbell Bench Press)',
-                        sets: 4,
-                        reps: '10-12',
-                        rest: 90,
-                        notes: 'חזה. הורדה מעגלית. אמות אנכיות בנקודה עליונה.'
-                    });
-                }
+                for (const { kw, getEx } of exKeywordMap) {
+                    const mentioned = kw.some(k =>
+                        customInstructions.includes(k) ||
+                        customInstructions.toLowerCase().includes(k.toLowerCase())
+                    );
+                    if (!mentioned) continue;
 
-                if (injected.length > 0) {
-                    // Remove auto-selected duplicates of injected exercises
-                    const injectedNames = injected.map(e => e.name);
-                    exercises = exercises.filter(e =>
-                        !injectedNames.some(n =>
-                            (n.includes('עליות מתח') && e.name.includes('עליות מתח')) ||
-                            (n.includes('מקבילים') && e.name.includes('מקבילים')) ||
-                            (n.includes('Dumbbell Bench') && e.name.includes('משקוליות יד') && e.name.includes('לחיצת חזה'))
+                    const isExcluded = kw.some(k =>
+                        exclPrefixes.some(p =>
+                            customInstructions.includes(p + k) ||
+                            customInstructions.toLowerCase().includes(p + k.toLowerCase())
                         )
                     );
-                    // Prepend injected exercises to the list
-                    exercises = [...injected, ...exercises];
+
+                    if (isExcluded) {
+                        toExclKw.push(...kw);
+                    } else {
+                        toInject.push({ kw, ex: getEx(customInstructions) });
+                    }
+                }
+
+                // Remove excluded exercises from auto-selected list
+                if (toExclKw.length > 0) {
+                    exercises = exercises.filter(e =>
+                        !toExclKw.some(k => e.name.toLowerCase().includes(k.toLowerCase()))
+                    );
+                }
+
+                // Prepend requested exercises (after removing duplicates from auto-selected list)
+                if (toInject.length > 0) {
+                    const allInjectedKw = toInject.flatMap(({ kw }) => kw);
+                    exercises = exercises.filter(e =>
+                        !allInjectedKw.some(k => e.name.toLowerCase().includes(k.toLowerCase()))
+                    );
+                    exercises = [...toInject.map(({ ex }) => ex), ...exercises];
                 }
             }
 
