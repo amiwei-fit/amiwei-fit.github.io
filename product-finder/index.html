@@ -390,24 +390,14 @@
         };
         const cfg = typeConfig[type];
 
-        const features = (product.keyFeatures || []).map(f =>
-            `<li class="flex items-start gap-1.5 text-sm"><span class="${cfg.textCls} opacity-60">•</span><span>${f}</span></li>`
-        ).join('');
-
-        const pros = (product.pros || []).map(p =>
-            `<span class="tag bg-green-100 text-green-800">✓ ${p}</span>`
-        ).join('');
-
-        const cons = (product.cons || []).map(c =>
-            `<span class="tag bg-red-100 text-red-800">✗ ${c}</span>`
-        ).join('');
-
-        const buyLinks = (product.buyLinks || []).map(l =>
-            `<a href="${l.url}" target="_blank" rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-xs bg-white/60 hover:bg-white/90 px-3 py-1.5 rounded-lg transition-colors font-medium ${cfg.textCls}">
-                🛒 ${l.site}
-            </a>`
-        ).join('');
+        // Support both old (keyFeatures/durabilityScore) and new (f1/f2/d/q) field names
+        const dScore = product.d ?? product.durabilityScore ?? 0;
+        const qScore = product.q ?? product.qualityScore    ?? 0;
+        const price  = product.price || product.priceRange  || 'לא ידוע';
+        const f1     = product.f1 || (product.keyFeatures?.[0]) || '';
+        const f2     = product.f2 || (product.keyFeatures?.[1]) || '';
+        const pro    = product.pro || (product.pros?.[0])   || '';
+        const con    = product.con || (product.cons?.[0])   || '';
 
         return `
         <div class="product-card ${cfg.cls} rounded-3xl p-6 shadow-lg">
@@ -419,41 +409,39 @@
                 </div>
                 <div class="text-right">
                     <p class="text-xs ${cfg.textCls} opacity-60 mb-0.5">מחיר</p>
-                    <p class="font-bold ${cfg.textCls} text-sm">${product.priceRange || 'לא ידוע'}</p>
+                    <p class="font-bold ${cfg.textCls} text-sm">${price}</p>
                 </div>
             </div>
-
-            <!-- Description -->
-            <p class="${cfg.textCls} text-sm leading-relaxed mb-4 opacity-80">${product.description || ''}</p>
 
             <!-- Scores -->
             <div class="mb-4 space-y-2">
                 <div>
                     <div class="flex justify-between mb-1">
                         <span class="text-xs font-bold ${cfg.textCls} opacity-70">עמידות</span>
-                        <span class="text-xs font-black ${cfg.textCls}">${product.durabilityScore}/10</span>
+                        <span class="text-xs font-black ${cfg.textCls}">${dScore}/10</span>
                     </div>
-                    ${renderScoreBar(product.durabilityScore, cfg.scoreColor)}
+                    ${renderScoreBar(dScore, cfg.scoreColor)}
                 </div>
                 <div>
                     <div class="flex justify-between mb-1">
-                        <span class="text-xs font-bold ${cfg.textCls} opacity-70">איכות כוללת</span>
-                        <span class="text-xs font-black ${cfg.textCls}">${product.qualityScore}/10</span>
+                        <span class="text-xs font-bold ${cfg.textCls} opacity-70">איכות</span>
+                        <span class="text-xs font-black ${cfg.textCls}">${qScore}/10</span>
                     </div>
-                    ${renderScoreBar(product.qualityScore, cfg.scoreColor)}
+                    ${renderScoreBar(qScore, cfg.scoreColor)}
                 </div>
             </div>
 
             <!-- Features -->
-            ${features ? `<ul class="${cfg.textCls} space-y-1 mb-4">${features}</ul>` : ''}
+            <ul class="${cfg.textCls} space-y-1 mb-4 text-sm">
+                ${f1 ? `<li>• ${f1}</li>` : ''}
+                ${f2 ? `<li>• ${f2}</li>` : ''}
+            </ul>
 
             <!-- Pros & Cons -->
-            <div class="flex flex-wrap gap-1.5 mb-4">
-                ${pros}${cons}
+            <div class="flex flex-wrap gap-1.5">
+                ${pro ? `<span class="tag bg-green-100 text-green-800">✓ ${pro}</span>` : ''}
+                ${con ? `<span class="tag bg-red-100 text-red-800">✗ ${con}</span>`   : ''}
             </div>
-
-            <!-- Buy links -->
-            ${buyLinks ? `<div class="flex flex-wrap gap-2 pt-3 border-t border-black/10">${buyLinks}</div>` : ''}
         </div>`;
     }
 
@@ -508,21 +496,18 @@
 
     // ── Claude API call ──────────────────────────────────────────
     async function callClaudeAPI(apiKey, productType) {
-        const systemPrompt = `אתה מומחה להמלצות מוצרים. החזר תמיד JSON תקני בלבד — ללא markdown, ללא הסברים, ללא טקסט לפני או אחרי.
+        const systemPrompt = `You are a product expert. Return ONLY a raw JSON object. No markdown. No explanation. No text before or after.
 
-פורמט JSON מדויק (עבור כל קטגוריה בדיוק 2 מוצרים):
+Exact schema - 2 products per category, all Hebrew values, extremely concise:
+{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X"}],"durable":[{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"}],"value":[{"name":"X","brand":"X","price":"X","d":7,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":7,"q":7,"f1":"X","f2":"X","pro":"X","con":"X"}],"budget":[{"name":"X","brand":"X","price":"X","d":6,"q":6,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":5,"q":6,"f1":"X","f2":"X","pro":"X","con":"X"}]}}
 
-{"searchSummary":"משפט אחד","categories":{"premium":[{"name":"שם","brand":"מותג","priceRange":"₪XXX-XXX","durabilityScore":9,"qualityScore":9,"keyFeatures":["פיצ'ר 1","פיצ'ר 2"],"pros":["יתרון"],"cons":["חיסרון"],"description":"משפט אחד קצר"},{"name":"שם2","brand":"מותג2","priceRange":"₪XXX-XXX","durabilityScore":8,"qualityScore":9,"keyFeatures":["פיצ'ר 1","פיצ'ר 2"],"pros":["יתרון"],"cons":["חיסרון"],"description":"משפט אחד קצר"}],"durable":[...2 products...],"value":[...2 products...],"budget":[...2 products...]}}
+Field rules:
+- name, brand, f1, f2, pro, con: max 4 Hebrew words each
+- price: ILS range like "₪200-300"
+- d = durability 1-10, q = quality 1-10
+- searchSummary: max 5 Hebrew words`;
 
-חוקים:
-- בדיוק 2 מוצרים בכל קטגוריה
-- description = משפט אחד קצר בלבד
-- keyFeatures = מקסימום 2 פריטים
-- pros/cons = פריט אחד כל אחד
-- אל תכלול buyLinks
-- החזר JSON תקני בלבד`;
-
-        const userPrompt = `מוצר: "${productType}"`;
+        const userPrompt = `Product: "${productType}"`;
 
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -534,7 +519,7 @@
             },
             body: JSON.stringify({
                 model: MODEL,
-                max_tokens: 8096,
+                max_tokens: 16000,
                 system: systemPrompt,
                 messages: [{ role: 'user', content: userPrompt }],
             }),
