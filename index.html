@@ -15,6 +15,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     
     <style>
         body {
@@ -45,12 +46,22 @@
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.firestore();
-        console.log('✅ Firebase initialized!');
+        const auth = firebase.auth();
+
+        // Hash a password with SHA-256 (browser native API)
+        const hashPassword = async (password) => {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        };
+
+        const DEFAULT_TRAINEE_PASSWORD = '1234';
 
         // Storage functions
         const storage = {
-            TRAINER_PASSWORD: '1234',
-            
             getTrainees: async () => {
                 try {
                     const snapshot = await db.collection('trainees').orderBy('createdAt', 'desc').get();
@@ -63,18 +74,32 @@
             
             saveTrainee: async (trainee) => {
                 try {
+                    const defaultHash = await hashPassword(DEFAULT_TRAINEE_PASSWORD);
                     const traineeData = {
                         ...trainee,
+                        traineePasswordHash: trainee.traineePasswordHash || defaultHash,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
                     await db.collection('trainees').doc(trainee.id).set(traineeData);
-                    console.log('✅ Trainee saved:', trainee.id);
                     return trainee;
                 } catch (error) {
                     console.error('Error saving trainee:', error);
                     alert('שגיאה בשמירת מתאמן. אנא נסה שוב.');
                     throw error;
+                }
+            },
+
+            updateTraineePassword: async (traineeId, newPasswordHash) => {
+                try {
+                    await db.collection('trainees').doc(traineeId).update({
+                        traineePasswordHash: newPasswordHash,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    return true;
+                } catch (error) {
+                    console.error('Error updating trainee password:', error);
+                    return false;
                 }
             },
             
@@ -87,7 +112,6 @@
                     await db.collection('trainees').doc(traineeId).update(updateData);
                     const doc = await db.collection('trainees').doc(traineeId).get();
                     if (doc.exists) {
-                        console.log('✅ Trainee updated:', traineeId);
                         return { id: doc.id, ...doc.data() };
                     }
                     return null;
@@ -96,26 +120,23 @@
                     return null;
                 }
             },
-            
+
             getTrainee: async (traineeId) => {
                 try {
                     const doc = await db.collection('trainees').doc(traineeId).get();
                     if (doc.exists) {
-                        console.log('✅ Trainee loaded:', traineeId);
                         return { id: doc.id, ...doc.data() };
                     }
-                    console.log('❌ Trainee not found:', traineeId);
                     return null;
                 } catch (error) {
                     console.error('Error getting trainee:', error);
                     return null;
                 }
             },
-            
+
             deleteTrainee: async (traineeId) => {
                 try {
                     await db.collection('trainees').doc(traineeId).delete();
-                    console.log('✅ Trainee deleted:', traineeId);
                 } catch (error) {
                     console.error('Error deleting trainee:', error);
                     throw error;
@@ -128,7 +149,6 @@
                         archived: true,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    console.log('✅ Trainee archived:', traineeId);
                 } catch (error) {
                     console.error('Error archiving trainee:', error);
                     throw error;
@@ -141,7 +161,6 @@
                         archived: false,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    console.log('✅ Trainee restored:', traineeId);
                 } catch (error) {
                     console.error('Error restoring trainee:', error);
                     throw error;
@@ -229,9 +248,6 @@
         // Workout generation algorithm
         const generateWorkoutPlan = (userData) => {
             const { weight, height, age, gender, activityLevel, workoutDuration, goals, muscleGroups, cardioTarget, weeklyWorkouts } = userData;
-
-            // DEBUG - remove after diagnosis
-            console.log('🏋️ generateWorkoutPlan | goals:', JSON.stringify(goals), '| activityLevel:', activityLevel, '| runningLevel:', userData.runningLevel, '| raceGoal:', userData.raceGoal);
 
             // --- Fix: merge top-level running fields into cardioTarget ---
             // (runningLevel, raceGoal etc. are stored as top-level formData fields, not inside cardioTarget)
@@ -1466,45 +1482,82 @@
 
         // Trainer App
         function TrainerApp() {
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [authUser, setAuthUser] = useState(undefined); // undefined = loading
+            const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
 
             useEffect(() => {
-                const auth = sessionStorage.getItem('trainerAuth');
-                if (auth === 'true') {
-                    setIsAuthenticated(true);
-                }
+                const unsubscribe = auth.onAuthStateChanged(user => {
+                    setAuthUser(user); // null = not logged in, object = logged in
+                });
+                return () => unsubscribe();
             }, []);
 
-            const handleLogin = (e) => {
+            const handleLogin = async (e) => {
                 e.preventDefault();
-                if (password === storage.TRAINER_PASSWORD) {
-                    setIsAuthenticated(true);
-                    sessionStorage.setItem('trainerAuth', 'true');
-                    setError('');
-                } else {
-                    setError('סיסמה שגויה');
+                setError('');
+                setLoading(true);
+                try {
+                    await auth.signInWithEmailAndPassword(email, password);
+                } catch (err) {
+                    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+                        // First-time setup: create the account
+                        try {
+                            await auth.createUserWithEmailAndPassword(email, password);
+                        } catch (createErr) {
+                            setError('שגיאה ביצירת חשבון: ' + createErr.message);
+                        }
+                    } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+                        setError('סיסמה שגויה');
+                    } else if (err.code === 'auth/invalid-email') {
+                        setError('כתובת מייל לא תקינה');
+                    } else {
+                        setError('שגיאת כניסה: ' + err.message);
+                    }
+                } finally {
+                    setLoading(false);
                 }
             };
 
-            if (!isAuthenticated) {
+            // Still loading auth state
+            if (authUser === undefined) {
+                return (
+                    <div className="min-h-screen gradient-bg flex items-center justify-center">
+                        <div className="text-white text-xl">טוען...</div>
+                    </div>
+                );
+            }
+
+            if (!authUser) {
                 return (
                     <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
                         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
                             <div className="text-center mb-8">
                                 <div className="text-6xl mb-4">🔒</div>
                                 <h1 className="text-3xl font-bold text-gray-800 mb-2">כניסת מאמן</h1>
-                                <p className="text-gray-600">הזן סיסמה לגישה למערכת</p>
+                                <p className="text-gray-600">כניסה עם מייל וסיסמה</p>
                             </div>
-                            
+
                             <form onSubmit={handleLogin} className="space-y-4">
+                                <div>
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="כתובת מייל"
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    />
+                                </div>
                                 <div>
                                     <input
                                         type="password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         placeholder="סיסמה"
+                                        required
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                     />
                                 </div>
@@ -1513,11 +1566,15 @@
                                 )}
                                 <button
                                     type="submit"
-                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition"
+                                    disabled={loading}
+                                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-3 px-6 rounded-xl transition"
                                 >
-                                    כניסה
+                                    {loading ? 'מתחבר...' : 'כניסה'}
                                 </button>
                             </form>
+                            <p className="text-center text-xs text-gray-400 mt-4">
+                                בפעם הראשונה: הזן מייל וסיסמה לבחירתך ליצירת חשבון
+                            </p>
                         </div>
                     </div>
                 );
@@ -1550,9 +1607,8 @@
                 await loadTrainees();
             };
 
-            const handleLogout = () => {
-                sessionStorage.removeItem('trainerAuth');
-                window.location.reload();
+            const handleLogout = async () => {
+                await auth.signOut();
             };
 
             const handleArchive = async (e, traineeId) => {
@@ -3449,6 +3505,20 @@ ${traineeLink}
             const [selectedWorkout, setSelectedWorkout] = useState(null);
             const [loading, setLoading] = useState(true);
 
+            // Password protection state
+            const [isAuthed, setIsAuthed] = useState(false);
+            const [passwordInput, setPasswordInput] = useState('');
+            const [passwordError, setPasswordError] = useState('');
+            const [passwordLoading, setPasswordLoading] = useState(false);
+
+            // Change password state
+            const [showChangePassword, setShowChangePassword] = useState(false);
+            const [currentPwInput, setCurrentPwInput] = useState('');
+            const [newPwInput, setNewPwInput] = useState('');
+            const [newPwConfirm, setNewPwConfirm] = useState('');
+            const [changePwError, setChangePwError] = useState('');
+            const [changePwSuccess, setChangePwSuccess] = useState('');
+
             useEffect(() => {
                 loadTrainee();
             }, [traineeId]);
@@ -3458,6 +3528,56 @@ ${traineeLink}
                 const data = await storage.getTrainee(traineeId);
                 setTrainee(data);
                 setLoading(false);
+            };
+
+            const handlePasswordSubmit = async (e) => {
+                e.preventDefault();
+                setPasswordError('');
+                setPasswordLoading(true);
+                try {
+                    const enteredHash = await hashPassword(passwordInput);
+                    // If no hash stored yet, use default
+                    const storedHash = trainee.traineePasswordHash || await hashPassword(DEFAULT_TRAINEE_PASSWORD);
+                    if (enteredHash === storedHash) {
+                        setIsAuthed(true);
+                    } else {
+                        setPasswordError('סיסמה שגויה');
+                    }
+                } finally {
+                    setPasswordLoading(false);
+                }
+            };
+
+            const handleChangePassword = async (e) => {
+                e.preventDefault();
+                setChangePwError('');
+                setChangePwSuccess('');
+                if (newPwInput !== newPwConfirm) {
+                    setChangePwError('הסיסמאות אינן תואמות');
+                    return;
+                }
+                if (newPwInput.length < 4) {
+                    setChangePwError('הסיסמה חייבת להכיל לפחות 4 תווים');
+                    return;
+                }
+                const currentHash = await hashPassword(currentPwInput);
+                const storedHash = trainee.traineePasswordHash || await hashPassword(DEFAULT_TRAINEE_PASSWORD);
+                if (currentHash !== storedHash) {
+                    setChangePwError('הסיסמה הנוכחית שגויה');
+                    return;
+                }
+                const newHash = await hashPassword(newPwInput);
+                const ok = await storage.updateTraineePassword(traineeId, newHash);
+                if (ok) {
+                    setTrainee(prev => ({ ...prev, traineePasswordHash: newHash }));
+                    setChangePwSuccess('הסיסמה שונתה בהצלחה!');
+                    setCurrentPwInput('');
+                    setNewPwInput('');
+                    setNewPwConfirm('');
+                    setTimeout(() => { setShowChangePassword(false); setChangePwSuccess(''); }, 2000);
+                } else {
+                    setChangePwError('שגיאה בשמירת הסיסמה');
+                }
             };
 
             if (loading) {
@@ -3478,6 +3598,41 @@ ${traineeLink}
                             <div className="text-6xl mb-4">❌</div>
                             <h1 className="text-2xl font-bold text-gray-800">תוכנית לא נמצאה</h1>
                             <p className="text-gray-600 mt-2">הקישור אינו תקף או שהתוכנית נמחקה</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Password gate
+            if (!isAuthed) {
+                return (
+                    <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+                            <div className="text-center mb-8">
+                                <div className="text-6xl mb-4">🏋️</div>
+                                <h1 className="text-2xl font-bold text-gray-800 mb-1">שלום, {trainee.name}!</h1>
+                                <p className="text-gray-600">הזן סיסמה לצפייה בתוכנית האימונים שלך</p>
+                            </div>
+                            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                                <input
+                                    type="password"
+                                    value={passwordInput}
+                                    onChange={(e) => setPasswordInput(e.target.value)}
+                                    placeholder="סיסמה (ברירת מחדל: 1234)"
+                                    required
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                />
+                                {passwordError && (
+                                    <div className="text-red-600 text-sm text-center">{passwordError}</div>
+                                )}
+                                <button
+                                    type="submit"
+                                    disabled={passwordLoading}
+                                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-3 px-6 rounded-xl transition"
+                                >
+                                    {passwordLoading ? 'בודק...' : 'כניסה'}
+                                </button>
+                            </form>
                         </div>
                     </div>
                 );
@@ -3525,11 +3680,70 @@ ${traineeLink}
             return (
                 <div className="min-h-screen bg-gray-50">
                     <div className="gradient-bg text-white p-6 shadow-lg">
-                        <div className="max-w-6xl mx-auto">
-                            <h1 className="text-2xl font-bold">שלום, {trainee.name}! 💪</h1>
-                            <p className="text-purple-100 mt-1">תוכנית האימונים האישית שלך</p>
+                        <div className="max-w-6xl mx-auto flex justify-between items-start">
+                            <div>
+                                <h1 className="text-2xl font-bold">שלום, {trainee.name}! 💪</h1>
+                                <p className="text-purple-100 mt-1">תוכנית האימונים האישית שלך</p>
+                            </div>
+                            <button
+                                onClick={() => setShowChangePassword(true)}
+                                className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm px-3 py-1 rounded-lg transition"
+                            >
+                                שנה סיסמה
+                            </button>
                         </div>
                     </div>
+
+                    {showChangePassword && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+                                <h2 className="text-xl font-bold text-gray-800 mb-6">שינוי סיסמה</h2>
+                                <form onSubmit={handleChangePassword} className="space-y-4">
+                                    <input
+                                        type="password"
+                                        value={currentPwInput}
+                                        onChange={(e) => setCurrentPwInput(e.target.value)}
+                                        placeholder="סיסמה נוכחית"
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    />
+                                    <input
+                                        type="password"
+                                        value={newPwInput}
+                                        onChange={(e) => setNewPwInput(e.target.value)}
+                                        placeholder="סיסמה חדשה"
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    />
+                                    <input
+                                        type="password"
+                                        value={newPwConfirm}
+                                        onChange={(e) => setNewPwConfirm(e.target.value)}
+                                        placeholder="אימות סיסמה חדשה"
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    />
+                                    {changePwError && <div className="text-red-600 text-sm text-center">{changePwError}</div>}
+                                    {changePwSuccess && <div className="text-green-600 text-sm text-center">{changePwSuccess}</div>}
+                                    <div className="flex gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowChangePassword(false); setChangePwError(''); setChangePwSuccess(''); }}
+                                            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-3 rounded-xl transition"
+                                        >
+                                            ביטול
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition"
+                                        >
+                                            שמור
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="max-w-6xl mx-auto p-6">
                         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">

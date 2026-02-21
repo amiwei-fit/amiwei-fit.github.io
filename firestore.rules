@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /trainees/{traineeId} {
+      // Authenticated trainer can do anything
+      allow read, write: if request.auth != null;
+
+      // Trainee (unauthenticated, accessed via URL) can read their own document
+      allow get: if true;
+
+      // Trainee can update only the workoutPlan field (mark workouts complete,
+      // send feedback) and the traineePasswordHash field (change their password)
+      allow update: if request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(['workoutPlan', 'traineePasswordHash', 'updatedAt']);
+    }
+  }
+}
