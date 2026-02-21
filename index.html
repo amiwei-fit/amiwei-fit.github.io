@@ -251,7 +251,7 @@
             const hasAerobicGoal   = goals.includes('שיפור יכולת אירובית');
 
             // Parse system prompt for workout modifications
-            const systemPromptText = (userData._systemPrompt || '');
+            const systemPromptText = (userData._systemPrompt || userData.customInstructions || '');
             const forcedCardioType =
                 (systemPromptText.includes('ריצה') || systemPromptText.includes('run')) ? 'ריצה' :
                 (systemPromptText.includes('אופניים') || systemPromptText.includes('bike') || systemPromptText.includes('cycling')) ? 'אופניים' :
@@ -285,6 +285,11 @@
                 if      (activityLevel === 'מתחיל') workoutsPerWeek = 3;
                 else if (activityLevel === 'בינוני') workoutsPerWeek = 4;
                 else                                 workoutsPerWeek = 5;
+            }
+
+            // Override duration if user specified a custom number of weeks
+            if (userData.planWeeks && parseInt(userData.planWeeks) > 0) {
+                duration = parseInt(userData.planWeeks);
             }
 
             // Running workout duration (by level — not the form's 60-min default)
@@ -1772,6 +1777,7 @@
             const [formData, setFormData] = useState({
                 name: '',
                 email: '',
+                phone: '',
                 age: '',
                 gender: '',
                 height: '',
@@ -1791,6 +1797,8 @@
                 currentHalfTime: '',
                 currentMarathonTime: '',
                 injuryHistory: '',
+                planWeeks: '',
+                customInstructions: '',
                 cardioTarget: {
                     hasDistanceGoal: false,
                     distance: '',
@@ -1903,14 +1911,25 @@
                                     </div>
 
                                     <div>
-                                        <label className="block text-gray-700 font-semibold mb-2">אימייל</label>
+                                        <label className="block text-gray-700 font-semibold mb-2">אימייל <span className="text-gray-400 font-normal text-sm">(אופציונלי)</span></label>
                                         <input
                                             type="email"
                                             name="email"
                                             value={formData.email}
                                             onChange={handleChange}
-                                            required
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-gray-700 font-semibold mb-2">טלפון <span className="text-gray-400 font-normal text-sm">(אופציונלי)</span></label>
+                                        <input
+                                            type="tel"
+                                            name="phone"
+                                            value={formData.phone}
+                                            onChange={handleChange}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                            placeholder="050-0000000"
                                         />
                                     </div>
 
@@ -2389,6 +2408,38 @@
                                         </div>
                                     </div>
                                 )}
+
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">אורך התוכנית (שבועות) <span className="text-gray-400 font-normal text-sm">(אופציונלי - ברירת מחדל לפי מטרה)</span></label>
+                                    <select
+                                        name="planWeeks"
+                                        value={formData.planWeeks}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        <option value="">ברירת מחדל לפי מטרה</option>
+                                        <option value="4">4 שבועות</option>
+                                        <option value="6">6 שבועות</option>
+                                        <option value="8">8 שבועות</option>
+                                        <option value="10">10 שבועות</option>
+                                        <option value="12">12 שבועות</option>
+                                        <option value="16">16 שבועות</option>
+                                        <option value="20">20 שבועות</option>
+                                        <option value="24">24 שבועות</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">הוראות מיוחדות למערכת <span className="text-gray-400 font-normal text-sm">(אופציונלי)</span></label>
+                                    <textarea
+                                        name="customInstructions"
+                                        value={formData.customInstructions}
+                                        onChange={handleChange}
+                                        rows={3}
+                                        placeholder="לדוגמה: התמקד באימוני ריצה, הפחת עצימות בשבועות הראשונים, הוסף אימוני חיזוק גב..."
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                                    />
+                                </div>
 
                                 <button
                                     type="submit"
