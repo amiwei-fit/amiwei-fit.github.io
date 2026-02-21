@@ -400,8 +400,9 @@
         const f2     = product.f2 || (product.keyFeatures?.[1]) || '';
         const pro    = product.pro || (product.pros?.[0])   || '';
         const con    = product.con || (product.cons?.[0])   || '';
-        const imgKey = (product.img || `${product.brand || ''} ${product.name || ''}`).trim().replace(/\s+/g, ',');
-        const imgUrl = `https://loremflickr.com/400/220/${encodeURIComponent(imgKey)}`;
+        const imgFallbackKey = (product.nameEn || product.img || `${product.brand || ''} ${product.name || ''}`).trim().replace(/\s+/g, ',');
+        const imgFallback = `https://loremflickr.com/400/220/${encodeURIComponent(imgFallbackKey)}`;
+        const imgUrl = product.imgUrl || imgFallback;
         const enc    = encodeURIComponent(JSON.stringify({...product, type}));
 
         return `
@@ -409,7 +410,7 @@
             <!-- Image -->
             <div class="card-img-wrapper">
                 <img class="card-img" src="${imgUrl}" alt="${product.name || ''}" loading="lazy"
-                    onerror="imgError(this,'${cfg.placeholderBg}','${cfg.emoji}')" />
+                    onerror="this.src!=='${imgFallback}'?this.src='${imgFallback}':imgError(this,'${cfg.placeholderBg}','${cfg.emoji}')" />
                 <div class="card-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
                 <div class="card-img-overlay"></div>
             </div>
@@ -473,17 +474,19 @@
         const f2     = data.f2 || (data.keyFeatures?.[1]) || '';
         const pro    = data.pro || (data.pros?.[0])   || '';
         const con    = data.con || (data.cons?.[0])   || '';
-        const imgKey = (data.img || `${data.brand || ''} ${data.name || ''}`).trim().replace(/\s+/g, ',');
-        const imgUrl = `https://loremflickr.com/640/260/${encodeURIComponent(imgKey)}`;
+        const imgFallbackKey = (data.nameEn || data.img || `${data.brand || ''} ${data.name || ''}`).trim().replace(/\s+/g, ',');
+        const imgFallback = `https://loremflickr.com/640/260/${encodeURIComponent(imgFallbackKey)}`;
+        const imgUrl = data.imgUrl || imgFallback;
 
-        // Buy links — generated client-side
-        const q = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
+        // Buy links — use English name for more accurate results
+        const qHe = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
+        const qEn = encodeURIComponent(data.nameEn || `${data.brand || ''} ${data.name || ''}`);
         const stores = [
-            { name:'ZAP',             icon:'🔍', bg:'#c0392b', url:`https://www.zap.co.il/search.aspx?keyword=${q}` },
-            { name:'אמזון',           icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/s?k=${q}` },
-            { name:'Google Shopping', icon:'🛍️', bg:'#2980b9', url:`https://www.google.com/search?tbm=shop&q=${q}&hl=iw` },
-            { name:'eBay',            icon:'🛒', bg:'#2271b1', url:`https://www.ebay.com/sch/i.html?_nkw=${q}` },
-            { name:'AliExpress',      icon:'✈️', bg:'#c0392b', url:`https://www.aliexpress.com/wholesale?SearchText=${q}` },
+            { name:'ZAP',             icon:'🔍', bg:'#c0392b', url:`https://www.zap.co.il/search.aspx?keyword=${qHe}` },
+            { name:'אמזון',           icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/s?k=${qEn}` },
+            { name:'Google Shopping', icon:'🛍️', bg:'#2980b9', url:`https://www.google.com/search?tbm=shop&q=${qEn}&hl=iw` },
+            { name:'eBay',            icon:'🛒', bg:'#2271b1', url:`https://www.ebay.com/sch/i.html?_nkw=${qEn}` },
+            { name:'AliExpress',      icon:'✈️', bg:'#c0392b', url:`https://www.aliexpress.com/wholesale?SearchText=${qEn}` },
         ];
         const buyHtml = stores.map(s =>
             `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="buy-btn" style="background:${s.bg}22;border-color:${s.bg}55;">${s.icon} ${s.name}</a>`
@@ -492,7 +495,7 @@
         document.getElementById('modalBox').innerHTML = `
             <div style="position:relative;">
                 <img src="${imgUrl}" class="modal-img" alt="${data.name || ''}"
-                    onerror="this.style.display='none';document.getElementById('modal-ph').style.display='flex'" />
+                    onerror="this.src!=='${imgFallback}'?this.src='${imgFallback}':(this.style.display='none',document.getElementById('modal-ph').style.display='flex')" />
                 <div id="modal-ph" class="modal-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
                 <button onclick="closeModal()"
                     style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.55);border:none;color:white;border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);transition:background 0.15s ease;"
@@ -679,13 +682,14 @@ Rules: Hebrew only, author=Hebrew first name, text max 9 words, summary max 14 w
         const systemPrompt = `You are a product expert. Return ONLY a raw JSON object. No markdown. No explanation.
 
 Exact schema - 2 products per category, Hebrew values, concise:
-{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}],"durable":[{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}],"value":[{"name":"X","brand":"X","price":"X","d":7,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":7,"q":7,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}],"budget":[{"name":"X","brand":"X","price":"X","d":6,"q":6,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":5,"q":6,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}]}}
+{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."},{"name":"X","brand":"X","nameEn":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."}],"durable":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."},{"name":"X","brand":"X","nameEn":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."}],"value":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":7,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."},{"name":"X","brand":"X","nameEn":"X","price":"X","d":7,"q":7,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."}],"budget":[{"name":"X","brand":"X","nameEn":"X","price":"X","d":6,"q":6,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."},{"name":"X","brand":"X","nameEn":"X","price":"X","d":5,"q":6,"f1":"X","f2":"X","pro":"X","con":"X","imgUrl":"https://..."}]}}
 
 Rules:
 - name, brand, f1, f2, pro, con: max 4 Hebrew words
 - price: ILS like "₪200-300"
 - d=durability 1-10, q=quality 1-10
-- img: 2-3 English words for image search (e.g. "nike running shoes")
+- nameEn: English product model name for search (e.g. "Nike Air Zoom Pegasus 40")
+- imgUrl: a real, direct image URL from the brand's official website or a major retailer (e.g. https://static.nike.com/...jpg). Must be a valid working image URL showing the actual product.
 - searchSummary: max 5 Hebrew words`;
 
         const response = await fetch(API_URL, {
