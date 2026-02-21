@@ -306,6 +306,12 @@
             // Override duration if user specified a custom number of weeks
             if (userData.planWeeks && parseInt(userData.planWeeks) > 0) {
                 duration = parseInt(userData.planWeeks);
+            } else if (systemPromptText) {
+                // Parse weeks from free-text instructions (e.g., "8 שבועות", "תוכנית של 12 שבועות")
+                const weeksMatch = systemPromptText.match(/(\d+)\s*שבועות?/);
+                if (weeksMatch) {
+                    duration = parseInt(weeksMatch[1]);
+                }
             }
 
             // Running workout duration (by level — not the form's 60-min default)
@@ -339,7 +345,7 @@
 
                     if (isMuscleBuilding) {
                         const sessionNum = (week - 1) * workoutsPerWeek + day;
-                        const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '');
+                        const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || [], week, sessionNum, userData.strengthExperience || '', systemPromptText);
                         const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
                         workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null, phase: phase.name };
 
@@ -404,7 +410,7 @@
             };
         };
 
-        const generateStrengthWorkout = (goals, level, multiplier, muscleGroups = [], workoutDuration = 60, availableEquipment = [], weekNum = 1, sessionNum = 1, strengthExperience = '') => {
+        const generateStrengthWorkout = (goals, level, multiplier, muscleGroups = [], workoutDuration = 60, availableEquipment = [], weekNum = 1, sessionNum = 1, strengthExperience = '', customInstructions = '') => {
             let exercises = [];
 
             // Check if this is for a runner (aerobic goal)
@@ -420,7 +426,7 @@
             const isMuscleBuilding = goals.includes('עלייה במסת שריר');
 
             if (isMuscleBuilding) {
-                return generateMuscleBuildingWorkout(muscleGroups, level, workoutDuration, availableEquipment, sessionNum, strengthExperience);
+                return generateMuscleBuildingWorkout(muscleGroups, level, workoutDuration, availableEquipment, sessionNum, strengthExperience, customInstructions);
             }
 
             // Default general fitness workout
@@ -687,7 +693,7 @@
         };
 
         // Professional muscle building workout based on equipment and muscle groups
-        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '') => {
+        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '', customInstructions = '') => {
             // Beginners (by level OR experience): always use FBW with progressive sets
             const isBeginnerLevel = strengthExperience === 'beginner' || level === 'מתחיל';
             if (isBeginnerLevel) {
@@ -1034,10 +1040,67 @@
                 exercises.splice(0, kettlebellCount, ...kettlebellExercises);
             }
             
+            // Inject specifically requested exercises from customInstructions
+            if (customInstructions) {
+                const injected = [];
+
+                // Pull-ups (עליות מתח)
+                if (customInstructions.includes('עליות מתח') || customInstructions.includes('pull-up') || customInstructions.includes('pullup')) {
+                    const maxMatch = customInstructions.match(/מקסימום\s*(\d+)/);
+                    const currentMax = maxMatch ? parseInt(maxMatch[1]) : null;
+                    const reps = currentMax
+                        ? `${Math.max(6, Math.round(currentMax * 0.7))}-${Math.round(currentMax * 0.85)}`
+                        : 'מקסימום';
+                    injected.push({
+                        name: 'עליות מתח (Pull-ups)',
+                        sets: 4,
+                        reps,
+                        rest: 120,
+                        notes: `גב וביצפס.${currentMax ? ` מקסימום נוכחי: ${currentMax}. עבוד ב-70-85% - איכות על כמות.` : ' אחיזה רחבה לגב, צרה לביצפס.'}`
+                    });
+                }
+
+                // Parallel bars / dips (מקבילים)
+                if (customInstructions.includes('מקבילים')) {
+                    injected.push({
+                        name: 'מקבילים (Parallel Bar Dips)',
+                        sets: 4,
+                        reps: '10-15',
+                        rest: 90,
+                        notes: 'חזה תחתון + טריצפס. נטייה קדימה לדגש חזה, גוף זקוף לדגש טריצפס.'
+                    });
+                }
+
+                // Dumbbell bench press (בנץ' פרס / לחיצת חזה עם משקולות יד)
+                if (customInstructions.includes('בנץ') || (customInstructions.includes('לחיצת חזה') && customInstructions.includes('משקולות'))) {
+                    injected.push({
+                        name: 'לחיצת חזה בשכיבה עם משקוליות יד (Dumbbell Bench Press)',
+                        sets: 4,
+                        reps: '10-12',
+                        rest: 90,
+                        notes: 'חזה. הורדה מעגלית. אמות אנכיות בנקודה עליונה.'
+                    });
+                }
+
+                if (injected.length > 0) {
+                    // Remove auto-selected duplicates of injected exercises
+                    const injectedNames = injected.map(e => e.name);
+                    exercises = exercises.filter(e =>
+                        !injectedNames.some(n =>
+                            (n.includes('עליות מתח') && e.name.includes('עליות מתח')) ||
+                            (n.includes('מקבילים') && e.name.includes('מקבילים')) ||
+                            (n.includes('Dumbbell Bench') && e.name.includes('משקוליות יד') && e.name.includes('לחיצת חזה'))
+                        )
+                    );
+                    // Prepend injected exercises to the list
+                    exercises = [...injected, ...exercises];
+                }
+            }
+
             // Limit based on workout duration
             const avgTimePerExercise = 7;
             const maxExercises = Math.floor(parseInt(workoutDuration) / avgTimePerExercise);
-            
+
             return exercises.slice(0, maxExercises);
         };
 
