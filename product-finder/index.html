@@ -5,209 +5,228 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מוצרכם - מאתר המוצרים החכם</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #0f172a;
+            background: #0a0f1e;
             min-height: 100vh;
         }
 
+        /* ── Hero ── */
         .hero-bg {
-            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
-        }
-
-        .card-premium {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            border: 2px solid #f59e0b;
-        }
-
-        .card-durable {
-            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-            border: 2px solid #22c55e;
-        }
-
-        .card-value {
-            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-            border: 2px solid #3b82f6;
-        }
-
-        .card-budget {
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-            border: 2px solid #94a3b8;
-        }
-
-        .product-card {
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .product-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-        }
-
-        .score-bar {
-            height: 8px;
-            border-radius: 4px;
-            background: #e2e8f0;
+            background: linear-gradient(135deg, #1a1744 0%, #2d2a7a 40%, #431569 100%);
+            position: relative;
             overflow: hidden;
         }
+        .hero-bg::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(139,92,246,0.3) 0%, transparent 70%);
+            pointer-events: none;
+        }
 
-        .score-fill {
+        /* ── Cards ── */
+        .card-premium { background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 60%, #fde68a 100%); border: 1.5px solid rgba(245,158,11,0.6); }
+        .card-durable { background: linear-gradient(145deg, #f0fdf4 0%, #dcfce7 60%, #bbf7d0 100%); border: 1.5px solid rgba(34,197,94,0.6); }
+        .card-value   { background: linear-gradient(145deg, #eff6ff 0%, #dbeafe 60%, #bfdbfe 100%); border: 1.5px solid rgba(59,130,246,0.6); }
+        .card-budget  { background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 60%, #e2e8f0 100%); border: 1.5px solid rgba(148,163,184,0.6); }
+
+        .product-card {
+            cursor: pointer;
+            transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s ease;
+            overflow: hidden;
+        }
+        .product-card:hover {
+            transform: translateY(-10px) scale(1.015);
+            box-shadow: 0 36px 72px rgba(0,0,0,0.35);
+        }
+
+        /* ── Card image ── */
+        .card-img-wrapper {
+            height: 180px;
+            overflow: hidden;
+            position: relative;
+        }
+        .card-img {
+            width: 100%;
             height: 100%;
-            border-radius: 4px;
-            transition: width 0.8s ease;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+            display: block;
+        }
+        .product-card:hover .card-img { transform: scale(1.08); }
+        .card-img-placeholder {
+            width: 100%;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4.5rem;
+        }
+        .card-img-overlay {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 70px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.25));
+            pointer-events: none;
         }
 
-        .spinner {
-            width: 48px;
-            height: 48px;
-            border: 4px solid rgba(139, 92, 246, 0.3);
-            border-top-color: #8b5cf6;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
+        /* ── Score bar ── */
+        .score-bar { height: 7px; border-radius: 9999px; background: rgba(0,0,0,0.12); overflow: hidden; }
+        .score-fill { height: 100%; border-radius: 9999px; transition: width 1.1s cubic-bezier(0.4,0,0.2,1); }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        /* ── Tag ── */
+        .tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 9999px; font-size: 11.5px; font-weight: 600; }
 
-        .pulse-dot {
-            animation: pulse 1.5s ease-in-out infinite;
-        }
+        /* ── Spinner ── */
+        .spinner { width: 52px; height: 52px; border: 4px solid rgba(139,92,246,0.25); border-top-color: #8b5cf6; border-radius: 50%; animation: spin 0.9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
+        /* ── Pulse dots ── */
+        .pulse-dot { animation: pulse 1.6s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
 
-        .search-input {
-            background: rgba(255,255,255,0.1);
-            border: 2px solid rgba(255,255,255,0.2);
-            color: white;
+        /* ── Section badge ── */
+        .section-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 22px; border-radius: 9999px; font-weight: 700; font-size: 14px; }
+
+        /* ── Inputs & buttons ── */
+        .search-input { background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2); color: white; backdrop-filter: blur(12px); }
+        .search-input::placeholder { color: rgba(255,255,255,0.45); }
+        .search-input:focus { background: rgba(255,255,255,0.15); border-color: #a78bfa; outline: none; box-shadow: 0 0 0 4px rgba(167,139,250,0.18); }
+        .search-btn { background: linear-gradient(135deg, #8b5cf6, #6d28d9); transition: all 0.22s ease; }
+        .search-btn:hover:not(:disabled) { background: linear-gradient(135deg,#7c3aed,#5b21b6); transform: translateY(-2px); box-shadow: 0 10px 24px rgba(139,92,246,0.45); }
+        .search-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .api-setup-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); backdrop-filter: blur(12px); }
+
+        /* ── Expand hint button ── */
+        .expand-hint {
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+            width: 100%; padding: 7px 12px; margin-top: 6px;
+            border: none; border-radius: 10px; cursor: pointer;
+            font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px;
+            background: rgba(0,0,0,0.08); transition: background 0.18s ease;
+        }
+        .expand-hint:hover { background: rgba(0,0,0,0.16); }
+
+        /* ── Fade in ── */
+        .fade-in { animation: fadeIn 0.55s ease-out; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(2,6,20,0.82);
             backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 999;
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px;
+            animation: overlayIn 0.22s ease;
         }
+        @keyframes overlayIn { from { opacity:0; } to { opacity:1; } }
 
-        .search-input::placeholder {
-            color: rgba(255,255,255,0.5);
+        .modal-box {
+            background: linear-gradient(160deg, #131c34 0%, #0e1526 100%);
+            border: 1px solid rgba(139,92,246,0.2);
+            border-radius: 28px;
+            max-width: 640px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: boxIn 0.32s cubic-bezier(0.34,1.56,0.64,1);
+            box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1);
+            scrollbar-width: thin;
+            scrollbar-color: #4c1d95 #1e293b;
         }
+        @keyframes boxIn { from { transform:translateY(28px) scale(0.96); opacity:0; } to { transform:translateY(0) scale(1); opacity:1; } }
 
-        .search-input:focus {
-            background: rgba(255,255,255,0.15);
-            border-color: #a78bfa;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2);
+        .modal-img { width: 100%; height: 250px; object-fit: cover; border-radius: 28px 28px 0 0; display: block; }
+        .modal-img-placeholder { width: 100%; height: 220px; border-radius: 28px 28px 0 0; display: flex; align-items: center; justify-content: center; font-size: 5.5rem; }
+
+        /* ── Stars ── */
+        .star-filled { color: #fbbf24; }
+        .star-empty  { color: #374151; }
+
+        /* ── Buy buttons ── */
+        .buy-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 9px 16px; border-radius: 14px;
+            font-size: 12.5px; font-weight: 700;
+            text-decoration: none; color: white;
+            border: 1px solid transparent;
+            transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
         }
+        .buy-btn:hover { transform: translateY(-3px); filter: brightness(1.15); box-shadow: 0 6px 18px rgba(0,0,0,0.3); }
 
-        .api-setup-card {
+        /* ── Review card ── */
+        .review-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 16px;
+            padding: 16px;
+            transition: background 0.18s ease;
+        }
+        .review-card:hover { background: rgba(255,255,255,0.07); }
+
+        /* ── Score tile (modal) ── */
+        .score-tile {
             background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 20px;
+            padding: 18px;
+            text-align: center;
         }
 
-        .tag {
-            display: inline-flex;
-            align-items: center;
-            padding: 2px 10px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .section-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 16px;
-            border-radius: 9999px;
-            font-weight: 700;
-            font-size: 14px;
-        }
-
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .search-btn {
-            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-            transition: all 0.2s ease;
-        }
-
-        .search-btn:hover:not(:disabled) {
-            background: linear-gradient(135deg, #7c3aed, #5b21b6);
-            transform: translateY(-1px);
-            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
-        }
-
-        .search-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        /* Scrollbar styling */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1e293b; }
-        ::-webkit-scrollbar-thumb { background: #4c1d95; border-radius: 3px; }
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #0e1526; }
+        ::-webkit-scrollbar-thumb { background: #4c1d95; border-radius: 9999px; }
     </style>
 </head>
 <body>
 
-<!-- Header -->
+<!-- ── Hero / Search ── -->
 <div class="hero-bg text-white">
-    <div class="max-w-6xl mx-auto px-4 py-12">
-        <div class="text-center mb-10">
-            <div class="inline-flex items-center gap-3 bg-white/10 rounded-full px-6 py-2 mb-6 text-sm font-medium">
-                <span>✨</span>
-                <span>מופעל על ידי בינה מלאכותית</span>
+    <div class="max-w-6xl mx-auto px-4 py-14">
+        <div class="text-center mb-12">
+            <div class="inline-flex items-center gap-2.5 bg-white/10 rounded-full px-5 py-2 mb-6 text-sm font-semibold backdrop-blur-sm border border-white/10">
+                <span>✨</span><span>מופעל על ידי בינה מלאכותית</span>
             </div>
-            <h1 class="text-5xl font-black mb-4 tracking-tight">
+            <h1 class="text-5xl md:text-6xl font-black mb-5 tracking-tight bg-gradient-to-br from-white via-purple-100 to-purple-300 bg-clip-text text-transparent">
                 מוצרכם
             </h1>
-            <p class="text-xl text-purple-200 max-w-2xl mx-auto leading-relaxed">
-                הזינו סוג מוצר וקבלו המלצות מדורגות לפי עמידות ואיכות — ממוינות לקטגוריות ברורות
+            <p class="text-lg text-purple-200/80 max-w-xl mx-auto leading-relaxed">
+                הזינו סוג מוצר וקבלו המלצות מדורגות לפי עמידות ואיכות
             </p>
         </div>
 
-        <!-- Search Box -->
         <div class="max-w-2xl mx-auto">
             <div class="flex gap-3">
-                <input
-                    type="text"
-                    id="productInput"
+                <input type="text" id="productInput"
                     class="search-input flex-1 rounded-2xl px-6 py-4 text-lg"
                     placeholder="לדוגמה: נעלי ריצה, תיק גב, מקרר, אוזניות..."
-                    autocomplete="off"
-                />
-                <button
-                    id="searchBtn"
-                    class="search-btn text-white font-bold px-8 py-4 rounded-2xl text-lg"
-                    onclick="startSearch()"
-                >
+                    autocomplete="off" />
+                <button id="searchBtn" onclick="startSearch()"
+                    class="search-btn text-white font-bold px-8 py-4 rounded-2xl text-lg whitespace-nowrap">
                     חפש
                 </button>
             </div>
-
-            <!-- Quick suggestions -->
-            <div class="flex flex-wrap gap-2 mt-4 justify-center" id="suggestions">
-                <span class="text-purple-300 text-sm ml-2 self-center">חיפושים פופולריים:</span>
-                <button onclick="quickSearch('נעלי ריצה')" class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors">נעלי ריצה</button>
-                <button onclick="quickSearch('תרמיל גב')" class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors">תרמיל גב</button>
-                <button onclick="quickSearch('אוזניות אלחוטיות')" class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors">אוזניות</button>
-                <button onclick="quickSearch('שעון ספורט')" class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors">שעון ספורט</button>
-                <button onclick="quickSearch('מצלמת אקשן')" class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors">מצלמת אקשן</button>
+            <div class="flex flex-wrap gap-2 mt-4 justify-center">
+                <span class="text-purple-300/70 text-sm ml-2 self-center">פופולרי:</span>
+                <button onclick="quickSearch('נעלי ריצה')"        class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors border border-white/10">נעלי ריצה</button>
+                <button onclick="quickSearch('תרמיל גב')"         class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors border border-white/10">תרמיל גב</button>
+                <button onclick="quickSearch('אוזניות אלחוטיות')" class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors border border-white/10">אוזניות</button>
+                <button onclick="quickSearch('שעון ספורט')"        class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors border border-white/10">שעון ספורט</button>
+                <button onclick="quickSearch('מצלמת אקשן')"        class="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-1.5 rounded-full transition-colors border border-white/10">מצלמת אקשן</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- API Setup Notice (shown if no API key) -->
+<!-- ── API Setup ── -->
 <div id="apiSetupSection" class="max-w-3xl mx-auto px-4 py-8" style="display:none;">
     <div class="api-setup-card rounded-3xl p-8 text-white">
         <div class="flex items-start gap-4">
@@ -219,18 +238,10 @@
                     הזינו את מפתח ה-API שלכם מ-<a href="https://console.anthropic.com" target="_blank" class="text-purple-400 underline">console.anthropic.com</a>
                 </p>
                 <div class="flex gap-3">
-                    <input
-                        type="password"
-                        id="apiKeyInput"
+                    <input type="password" id="apiKeyInput"
                         class="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 text-sm focus:outline-none focus:border-purple-400"
-                        placeholder="sk-ant-api..."
-                    />
-                    <button
-                        onclick="saveApiKey()"
-                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-3 rounded-xl transition-colors text-sm"
-                    >
-                        שמור
-                    </button>
+                        placeholder="sk-ant-api..." />
+                    <button onclick="saveApiKey()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-3 rounded-xl transition-colors text-sm">שמור</button>
                 </div>
                 <p class="text-gray-500 text-xs mt-3">המפתח נשמר רק בדפדפן שלכם ולא נשלח לשום שרת.</p>
             </div>
@@ -238,114 +249,94 @@
     </div>
 </div>
 
-<!-- Loading State -->
-<div id="loadingSection" class="max-w-4xl mx-auto px-4 py-16 text-center" style="display:none;">
-    <div class="flex flex-col items-center gap-6">
+<!-- ── Loading ── -->
+<div id="loadingSection" class="max-w-4xl mx-auto px-4 py-20 text-center" style="display:none;">
+    <div class="flex flex-col items-center gap-7">
         <div class="spinner"></div>
         <div>
             <p class="text-white text-xl font-bold mb-2">מחפש את המוצרים הטובים ביותר...</p>
-            <p class="text-gray-400 text-sm" id="loadingText">מנתח עמידות, איכות וערך לכסף</p>
+            <p class="text-gray-500 text-sm" id="loadingText">מנתח עמידות, איכות וערך לכסף</p>
         </div>
-        <div class="flex gap-2 mt-4">
-            <div class="pulse-dot w-2 h-2 bg-purple-400 rounded-full" style="animation-delay: 0s;"></div>
-            <div class="pulse-dot w-2 h-2 bg-purple-400 rounded-full" style="animation-delay: 0.3s;"></div>
-            <div class="pulse-dot w-2 h-2 bg-purple-400 rounded-full" style="animation-delay: 0.6s;"></div>
+        <div class="flex gap-2">
+            <div class="pulse-dot w-2 h-2 bg-purple-500 rounded-full" style="animation-delay:0s"></div>
+            <div class="pulse-dot w-2 h-2 bg-purple-500 rounded-full" style="animation-delay:0.3s"></div>
+            <div class="pulse-dot w-2 h-2 bg-purple-500 rounded-full" style="animation-delay:0.6s"></div>
         </div>
     </div>
 </div>
 
-<!-- Error State -->
+<!-- ── Error ── -->
 <div id="errorSection" class="max-w-2xl mx-auto px-4 py-8" style="display:none;">
-    <div class="bg-red-900/30 border border-red-500/30 rounded-2xl p-6 text-white text-center">
+    <div class="bg-red-950/50 border border-red-500/30 rounded-2xl p-6 text-white text-center">
         <div class="text-4xl mb-3">⚠️</div>
         <h3 class="text-lg font-bold mb-2">שגיאה בחיפוש</h3>
         <p id="errorText" class="text-red-300 text-sm"></p>
-        <button onclick="resetSearch()" class="mt-4 bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-xl text-sm font-bold transition-colors">
-            נסה שוב
-        </button>
+        <button onclick="resetSearch()" class="mt-4 bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-xl text-sm font-bold transition-colors">נסה שוב</button>
     </div>
 </div>
 
-<!-- Results Section -->
-<div id="resultsSection" class="max-w-6xl mx-auto px-4 py-10" style="display:none;">
-
-    <!-- Search summary -->
-    <div class="text-center mb-10 fade-in">
-        <p class="text-gray-400 text-sm mb-2">תוצאות עבור</p>
+<!-- ── Results ── -->
+<div id="resultsSection" class="max-w-6xl mx-auto px-4 py-12" style="display:none;">
+    <div class="text-center mb-12 fade-in">
+        <p class="text-gray-600 text-sm mb-1.5">תוצאות עבור</p>
         <h2 class="text-3xl font-black text-white" id="resultTitle"></h2>
-        <p class="text-gray-400 text-sm mt-3" id="resultSummary"></p>
+        <p class="text-gray-500 text-sm mt-3" id="resultSummary"></p>
+        <p class="text-gray-700 text-xs mt-1.5">לחץ על כרטיס מוצר לפרטים נוספים, ביקורות ומקומות קנייה</p>
     </div>
 
-    <!-- Categories -->
-    <!-- Premium -->
-    <div class="mb-12 fade-in">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="section-badge bg-yellow-100 text-yellow-800">
-                <span>👑</span>
-                <span>פרימיום — איכות מקסימלית</span>
-            </div>
-        </div>
+    <div class="mb-14 fade-in">
+        <div class="flex items-center gap-3 mb-7"><div class="section-badge bg-yellow-100 text-yellow-800"><span>👑</span><span>פרימיום — איכות מקסימלית</span></div></div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="premiumCards"></div>
     </div>
-
-    <!-- Durable -->
-    <div class="mb-12 fade-in">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="section-badge bg-green-100 text-green-800">
-                <span>🛡️</span>
-                <span>עמיד ביותר — בנוי להישאר</span>
-            </div>
-        </div>
+    <div class="mb-14 fade-in">
+        <div class="flex items-center gap-3 mb-7"><div class="section-badge bg-green-100 text-green-800"><span>🛡️</span><span>עמיד ביותר — בנוי להישאר</span></div></div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="durableCards"></div>
     </div>
-
-    <!-- Value -->
-    <div class="mb-12 fade-in">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="section-badge bg-blue-100 text-blue-800">
-                <span>⚡</span>
-                <span>מחיר-ביצועים — הכי חכם לכסף</span>
-            </div>
-        </div>
+    <div class="mb-14 fade-in">
+        <div class="flex items-center gap-3 mb-7"><div class="section-badge bg-blue-100 text-blue-800"><span>⚡</span><span>מחיר-ביצועים — הכי חכם לכסף</span></div></div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="valueCards"></div>
     </div>
-
-    <!-- Budget -->
-    <div class="mb-12 fade-in">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="section-badge bg-gray-200 text-gray-700">
-                <span>💰</span>
-                <span>חסכוני — תקציב נמוך, איכות סבירה</span>
-            </div>
-        </div>
+    <div class="mb-14 fade-in">
+        <div class="flex items-center gap-3 mb-7"><div class="section-badge bg-gray-200 text-gray-700"><span>💰</span><span>חסכוני — תקציב נמוך</span></div></div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="budgetCards"></div>
     </div>
 
-    <!-- New search -->
-    <div class="text-center mt-10 fade-in">
-        <button onclick="resetSearch()" class="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-8 py-3 rounded-2xl font-bold transition-colors">
+    <div class="text-center mt-8 fade-in">
+        <button onclick="resetSearch()" class="bg-white/8 hover:bg-white/14 text-white border border-white/15 px-8 py-3 rounded-2xl font-bold transition-colors backdrop-blur-sm">
             חיפוש חדש
         </button>
     </div>
 </div>
 
-<!-- Footer -->
-<footer class="text-center text-gray-600 text-sm py-8 border-t border-gray-800 mt-8">
+<!-- ── Modal ── -->
+<div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="closeModalOnOverlay(event)">
+    <div class="modal-box" id="modalBox"></div>
+</div>
+
+<!-- ── Footer ── -->
+<footer class="text-center text-gray-700 text-sm py-8 border-t border-gray-800/50 mt-8">
     מוצרכם | מופעל על ידי Claude AI
 </footer>
 
 <script>
-    // ── Config ──────────────────────────────────────────────────
     const API_URL = 'https://api.anthropic.com/v1/messages';
     const MODEL   = 'claude-sonnet-4-6';
 
-    // ── Helpers ─────────────────────────────────────────────────
+    // ── Type config ──────────────────────────────────────────────
+    const TYPE_CFG = {
+        premium: { cls:'card-premium', textCls:'text-yellow-900', scoreColor:'#d97706', placeholderBg:'#fef3c7', emoji:'👑' },
+        durable: { cls:'card-durable', textCls:'text-green-900',  scoreColor:'#16a34a', placeholderBg:'#dcfce7', emoji:'🛡️' },
+        value:   { cls:'card-value',   textCls:'text-blue-900',   scoreColor:'#2563eb', placeholderBg:'#dbeafe', emoji:'⚡' },
+        budget:  { cls:'card-budget',  textCls:'text-gray-800',   scoreColor:'#475569', placeholderBg:'#e2e8f0', emoji:'💰' },
+    };
+
+    // ── Helpers ──────────────────────────────────────────────────
     function getApiKey() { return localStorage.getItem('productfinder_apikey') || ''; }
 
     function saveApiKey() {
         const key = document.getElementById('apiKeyInput').value.trim();
         if (!key) return alert('אנא הזינו מפתח API תקין');
-        if (!key.startsWith('sk-ant')) return alert('מפתח API לא תקין. ודאו שהוא מתחיל ב-sk-ant');
+        if (!key.startsWith('sk-ant')) return alert('מפתח API לא תקין');
         localStorage.setItem('productfinder_apikey', key);
         document.getElementById('apiSetupSection').style.display = 'none';
         alert('מפתח API נשמר בהצלחה!');
@@ -357,9 +348,8 @@
     }
 
     function resetSearch() {
-        document.getElementById('resultsSection').style.display = 'none';
-        document.getElementById('errorSection').style.display   = 'none';
-        document.getElementById('loadingSection').style.display = 'none';
+        ['resultsSection','errorSection','loadingSection'].forEach(id =>
+            document.getElementById(id).style.display = 'none');
         document.getElementById('productInput').value = '';
         document.getElementById('productInput').focus();
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -371,26 +361,38 @@
         document.getElementById('errorSection').style.display = 'block';
     }
 
-    // ── Score bar renderer ───────────────────────────────────────
     function renderScoreBar(score, color) {
-        const pct = (score / 10) * 100;
-        return `
-            <div class="score-bar">
-                <div class="score-fill" style="width:${pct}%; background:${color};"></div>
-            </div>`;
+        return `<div class="score-bar"><div class="score-fill" style="width:${(score/10)*100}%;background:${color};"></div></div>`;
     }
 
-    // ── Product card renderer ────────────────────────────────────
-    function renderCard(product, type) {
-        const typeConfig = {
-            premium: { cls: 'card-premium', textCls: 'text-yellow-900', tagBg: 'bg-yellow-500', tagText: 'text-yellow-50',  scoreColor: '#f59e0b' },
-            durable: { cls: 'card-durable', textCls: 'text-green-900',  tagBg: 'bg-green-500',  tagText: 'text-green-50',   scoreColor: '#22c55e' },
-            value:   { cls: 'card-value',   textCls: 'text-blue-900',   tagBg: 'bg-blue-500',   tagText: 'text-blue-50',    scoreColor: '#3b82f6' },
-            budget:  { cls: 'card-budget',  textCls: 'text-gray-800',   tagBg: 'bg-gray-500',   tagText: 'text-gray-50',    scoreColor: '#64748b' },
-        };
-        const cfg = typeConfig[type];
+    function renderStars(rating) {
+        let html = '';
+        for (let i = 1; i <= 5; i++) {
+            html += `<span class="${i <= rating ? 'star-filled' : 'star-empty'}" style="font-size:14px;">${i <= rating ? '★' : '☆'}</span>`;
+        }
+        return html;
+    }
 
-        // Support both old (keyFeatures/durabilityScore) and new (f1/f2/d/q) field names
+    // ── Image error handler ──────────────────────────────────────
+    function imgError(imgEl, bgColor, emoji) {
+        const wrapper = imgEl.parentElement;
+        imgEl.style.display = 'none';
+        const ph = wrapper.querySelector('.card-img-placeholder');
+        if (ph) ph.style.display = 'flex';
+    }
+
+    function modalImgError(imgEl, bgColor, emoji) {
+        imgEl.style.display = 'none';
+        const ph = document.createElement('div');
+        ph.className = 'modal-img-placeholder';
+        ph.style.background = bgColor;
+        ph.textContent = emoji;
+        imgEl.parentElement.insertBefore(ph, imgEl.nextSibling);
+    }
+
+    // ── Card renderer ────────────────────────────────────────────
+    function renderCard(product, type) {
+        const cfg    = TYPE_CFG[type];
         const dScore = product.d ?? product.durabilityScore ?? 0;
         const qScore = product.q ?? product.qualityScore    ?? 0;
         const price  = product.price || product.priceRange  || 'לא ידוע';
@@ -398,60 +400,241 @@
         const f2     = product.f2 || (product.keyFeatures?.[1]) || '';
         const pro    = product.pro || (product.pros?.[0])   || '';
         const con    = product.con || (product.cons?.[0])   || '';
+        const imgKey = product.img || `${product.brand || ''} ${product.name || ''}`;
+        const imgUrl = `https://source.unsplash.com/400x220/?${encodeURIComponent(imgKey)}`;
+        const enc    = encodeURIComponent(JSON.stringify({...product, type}));
 
         return `
-        <div class="product-card ${cfg.cls} rounded-3xl p-6 shadow-lg">
-            <!-- Header -->
-            <div class="flex items-start justify-between mb-4">
-                <div>
-                    <p class="text-xs font-bold ${cfg.textCls} opacity-60 uppercase tracking-wider mb-1">${product.brand || ''}</p>
-                    <h3 class="text-lg font-black ${cfg.textCls} leading-tight">${product.name}</h3>
-                </div>
-                <div class="text-right">
-                    <p class="text-xs ${cfg.textCls} opacity-60 mb-0.5">מחיר</p>
-                    <p class="font-bold ${cfg.textCls} text-sm">${price}</p>
-                </div>
+        <div class="product-card ${cfg.cls} rounded-3xl shadow-lg" onclick="openModal(this)" data-product="${enc}">
+            <!-- Image -->
+            <div class="card-img-wrapper">
+                <img class="card-img" src="${imgUrl}" alt="${product.name || ''}" loading="lazy"
+                    onerror="imgError(this,'${cfg.placeholderBg}','${cfg.emoji}')" />
+                <div class="card-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
+                <div class="card-img-overlay"></div>
             </div>
-
-            <!-- Scores -->
-            <div class="mb-4 space-y-2">
-                <div>
-                    <div class="flex justify-between mb-1">
-                        <span class="text-xs font-bold ${cfg.textCls} opacity-70">עמידות</span>
-                        <span class="text-xs font-black ${cfg.textCls}">${dScore}/10</span>
+            <!-- Body -->
+            <div class="p-5">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex-1 ml-3">
+                        <p class="text-xs font-bold ${cfg.textCls} opacity-55 uppercase tracking-wider mb-0.5">${product.brand || ''}</p>
+                        <h3 class="text-base font-black ${cfg.textCls} leading-snug">${product.name || ''}</h3>
                     </div>
-                    ${renderScoreBar(dScore, cfg.scoreColor)}
-                </div>
-                <div>
-                    <div class="flex justify-between mb-1">
-                        <span class="text-xs font-bold ${cfg.textCls} opacity-70">איכות</span>
-                        <span class="text-xs font-black ${cfg.textCls}">${qScore}/10</span>
+                    <div class="text-left shrink-0">
+                        <p class="text-xs ${cfg.textCls} opacity-50 mb-0.5">מחיר</p>
+                        <p class="font-black ${cfg.textCls} text-sm">${price}</p>
                     </div>
-                    ${renderScoreBar(qScore, cfg.scoreColor)}
                 </div>
-            </div>
 
-            <!-- Features -->
-            <ul class="${cfg.textCls} space-y-1 mb-4 text-sm">
-                ${f1 ? `<li>• ${f1}</li>` : ''}
-                ${f2 ? `<li>• ${f2}</li>` : ''}
-            </ul>
+                <div class="space-y-2.5 mb-3.5">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-xs font-semibold ${cfg.textCls} opacity-60">עמידות</span>
+                            <span class="text-xs font-black ${cfg.textCls}">${dScore}/10</span>
+                        </div>
+                        ${renderScoreBar(dScore, cfg.scoreColor)}
+                    </div>
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-xs font-semibold ${cfg.textCls} opacity-60">איכות</span>
+                            <span class="text-xs font-black ${cfg.textCls}">${qScore}/10</span>
+                        </div>
+                        ${renderScoreBar(qScore, cfg.scoreColor)}
+                    </div>
+                </div>
 
-            <!-- Pros & Cons -->
-            <div class="flex flex-wrap gap-1.5">
-                ${pro ? `<span class="tag bg-green-100 text-green-800">✓ ${pro}</span>` : ''}
-                ${con ? `<span class="tag bg-red-100 text-red-800">✗ ${con}</span>`   : ''}
+                <ul class="${cfg.textCls} opacity-80 text-xs space-y-1 mb-3.5">
+                    ${f1 ? `<li class="flex items-center gap-1.5"><span class="opacity-40">▸</span>${f1}</li>` : ''}
+                    ${f2 ? `<li class="flex items-center gap-1.5"><span class="opacity-40">▸</span>${f2}</li>` : ''}
+                </ul>
+
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    ${pro ? `<span class="tag bg-green-100/80 text-green-800">✓ ${pro}</span>` : ''}
+                    ${con ? `<span class="tag bg-red-100/80 text-red-800">✗ ${con}</span>`   : ''}
+                </div>
+
+                <button class="expand-hint ${cfg.textCls}">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                    פרטים נוספים, ביקורות וקנייה
+                </button>
             </div>
         </div>`;
     }
 
-    // ── Main search function ─────────────────────────────────────
+    // ── Modal ────────────────────────────────────────────────────
+    function openModal(cardEl) {
+        const data   = JSON.parse(decodeURIComponent(cardEl.dataset.product));
+        const type   = data.type;
+        const cfg    = TYPE_CFG[type] || TYPE_CFG.value;
+        const dScore = data.d ?? data.durabilityScore ?? 0;
+        const qScore = data.q ?? data.qualityScore    ?? 0;
+        const price  = data.price || data.priceRange  || 'לא ידוע';
+        const f1     = data.f1 || (data.keyFeatures?.[0]) || '';
+        const f2     = data.f2 || (data.keyFeatures?.[1]) || '';
+        const pro    = data.pro || (data.pros?.[0])   || '';
+        const con    = data.con || (data.cons?.[0])   || '';
+        const imgKey = data.img || `${data.brand || ''} ${data.name || ''}`;
+        const imgUrl = `https://source.unsplash.com/640x260/?${encodeURIComponent(imgKey)}`;
+
+        // Buy links — generated client-side
+        const q = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
+        const stores = [
+            { name:'ZAP',             icon:'🔍', bg:'#c0392b', url:`https://www.zap.co.il/search.aspx?keyword=${q}` },
+            { name:'אמזון',           icon:'📦', bg:'#e67e22', url:`https://www.amazon.co.il/s?k=${q}` },
+            { name:'Google Shopping', icon:'🛍️', bg:'#2980b9', url:`https://www.google.com/search?tbm=shop&q=${q}&hl=iw` },
+            { name:'eBay',            icon:'🛒', bg:'#2271b1', url:`https://www.ebay.com/sch/i.html?_nkw=${q}` },
+            { name:'AliExpress',      icon:'✈️', bg:'#c0392b', url:`https://www.aliexpress.com/wholesale?SearchText=${q}` },
+        ];
+        const buyHtml = stores.map(s =>
+            `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="buy-btn" style="background:${s.bg}22;border-color:${s.bg}55;">${s.icon} ${s.name}</a>`
+        ).join('');
+
+        document.getElementById('modalBox').innerHTML = `
+            <div style="position:relative;">
+                <img src="${imgUrl}" class="modal-img" alt="${data.name || ''}"
+                    onerror="this.style.display='none';document.getElementById('modal-ph').style.display='flex'" />
+                <div id="modal-ph" class="modal-img-placeholder" style="display:none;background:${cfg.placeholderBg};">${cfg.emoji}</div>
+                <button onclick="closeModal()"
+                    style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.55);border:none;color:white;border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);transition:background 0.15s ease;"
+                    onmouseover="this.style.background='rgba(0,0,0,0.75)'" onmouseout="this.style.background='rgba(0,0,0,0.55)'">✕</button>
+                <!-- Category badge -->
+                <div style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border-radius:9999px;padding:4px 12px;color:white;font-size:11px;font-weight:700;">
+                    ${cfg.emoji} ${type === 'premium' ? 'פרימיום' : type === 'durable' ? 'עמיד' : type === 'value' ? 'מחיר-ביצועים' : 'חסכוני'}
+                </div>
+            </div>
+
+            <div class="p-6 text-white">
+                <!-- Title & price -->
+                <div class="flex items-start justify-between mb-5">
+                    <div class="flex-1 ml-3">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">${data.brand || ''}</p>
+                        <h2 class="text-2xl font-black leading-tight">${data.name || ''}</h2>
+                    </div>
+                    <div class="text-left shrink-0">
+                        <p class="text-xs text-gray-500 mb-0.5">מחיר</p>
+                        <p class="text-xl font-black" style="color:#a78bfa;">${price}</p>
+                    </div>
+                </div>
+
+                <!-- Score tiles -->
+                <div class="grid grid-cols-2 gap-4 mb-5">
+                    <div class="score-tile">
+                        <p class="text-3xl font-black mb-0.5">${dScore}<span class="text-sm text-gray-500">/10</span></p>
+                        <p class="text-xs text-gray-500 mb-2">עמידות</p>
+                        ${renderScoreBar(dScore, cfg.scoreColor)}
+                    </div>
+                    <div class="score-tile">
+                        <p class="text-3xl font-black mb-0.5">${qScore}<span class="text-sm text-gray-500">/10</span></p>
+                        <p class="text-xs text-gray-500 mb-2">איכות</p>
+                        ${renderScoreBar(qScore, cfg.scoreColor)}
+                    </div>
+                </div>
+
+                <!-- Features & pros/cons -->
+                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:18px;padding:18px;" class="mb-5">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">מאפיינים עיקריים</p>
+                    <ul class="space-y-2 text-sm mb-3 text-gray-200">
+                        ${f1 ? `<li class="flex items-center gap-2"><span style="color:#8b5cf6;">▸</span>${f1}</li>` : ''}
+                        ${f2 ? `<li class="flex items-center gap-2"><span style="color:#8b5cf6;">▸</span>${f2}</li>` : ''}
+                    </ul>
+                    <div class="flex flex-wrap gap-2">
+                        ${pro ? `<span class="tag" style="background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.25);">✓ ${pro}</span>` : ''}
+                        ${con ? `<span class="tag" style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.25);">✗ ${con}</span>` : ''}
+                    </div>
+                </div>
+
+                <!-- Buy links -->
+                <div class="mb-5">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">מקומות לרכישה</p>
+                    <div class="flex flex-wrap gap-2">${buyHtml}</div>
+                </div>
+
+                <!-- Reviews -->
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">ביקורות משתמשים</p>
+                    <div id="reviewsContent" class="space-y-3">
+                        <div class="flex items-center gap-3 text-gray-600 text-sm py-2">
+                            <div style="width:16px;height:16px;border:2.5px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+                            טוען ביקורות...
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+        document.getElementById('modalOverlay').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        loadReviews(data);
+    }
+
+    function closeModal() {
+        document.getElementById('modalOverlay').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    function closeModalOnOverlay(e) {
+        if (e.target === document.getElementById('modalOverlay')) closeModal();
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    // ── Reviews (lazy API call) ──────────────────────────────────
+    async function loadReviews(product) {
+        const apiKey = getApiKey();
+        if (!apiKey) return;
+        try {
+            const sysPrompt = `Return ONLY raw JSON. No markdown.
+Schema: {"summary":"X","reviews":[{"author":"X","rating":4,"text":"X"},{"author":"X","rating":5,"text":"X"},{"author":"X","rating":3,"text":"X"}]}
+Rules: Hebrew only, author=Hebrew first name, text max 9 words, summary max 14 words, rating 1-5`;
+
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                    'anthropic-dangerous-direct-browser-access': 'true',
+                },
+                body: JSON.stringify({
+                    model: MODEL,
+                    max_tokens: 600,
+                    system: sysPrompt,
+                    messages: [{ role: 'user', content: `Product: "${product.brand || ''} ${product.name}" - 3 realistic user reviews` }],
+                }),
+            });
+
+            if (!res.ok) throw new Error('api error');
+            const json = await res.json();
+            let text = (json.content?.[0]?.text || '').replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/i,'').trim();
+            const s = text.indexOf('{'), e = text.lastIndexOf('}');
+            if (s === -1 || e === -1) throw new Error('bad json');
+            const parsed = JSON.parse(text.slice(s, e + 1));
+
+            const el = document.getElementById('reviewsContent');
+            if (!el) return;
+
+            let html = '';
+            if (parsed.summary) html += `<p class="text-sm text-gray-300 mb-3 leading-relaxed">${parsed.summary}</p>`;
+            (parsed.reviews || []).forEach(r => {
+                html += `
+                <div class="review-card">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-bold text-white">${r.author || ''}</span>
+                        <div>${renderStars(r.rating || 3)}</div>
+                    </div>
+                    <p class="text-sm text-gray-300 leading-relaxed">${r.text || ''}</p>
+                </div>`;
+            });
+            el.innerHTML = html || '<p class="text-gray-600 text-sm">אין ביקורות זמינות</p>';
+        } catch {
+            const el = document.getElementById('reviewsContent');
+            if (el) el.innerHTML = '<p class="text-gray-600 text-sm">לא הצלחנו לטעון ביקורות</p>';
+        }
+    }
+
+    // ── Main search ──────────────────────────────────────────────
     async function startSearch() {
         const productType = document.getElementById('productInput').value.trim();
-        if (!productType) {
-            document.getElementById('productInput').focus();
-            return;
-        }
+        if (!productType) { document.getElementById('productInput').focus(); return; }
 
         const apiKey = getApiKey();
         if (!apiKey) {
@@ -460,34 +643,31 @@
             return;
         }
 
-        // Show loading
-        document.getElementById('resultsSection').style.display = 'none';
-        document.getElementById('errorSection').style.display   = 'none';
+        ['resultsSection','errorSection'].forEach(id => document.getElementById(id).style.display = 'none');
         document.getElementById('loadingSection').style.display = 'block';
         document.getElementById('searchBtn').disabled = true;
 
-        const loadingMessages = [
+        const msgs = [
             'מנתח עמידות, איכות וערך לכסף...',
             'מחפש ברחבי האינטרנט...',
             'ממיין לפי קטגוריות...',
             'מסכם המלצות מומחים...',
         ];
-        let msgIdx = 0;
-        const msgInterval = setInterval(() => {
-            msgIdx = (msgIdx + 1) % loadingMessages.length;
-            document.getElementById('loadingText').textContent = loadingMessages[msgIdx];
+        let idx = 0;
+        const interval = setInterval(() => {
+            document.getElementById('loadingText').textContent = msgs[++idx % msgs.length];
         }, 2000);
 
         try {
             const data = await callClaudeAPI(apiKey, productType);
-            clearInterval(msgInterval);
+            clearInterval(interval);
             renderResults(productType, data);
         } catch (err) {
-            clearInterval(msgInterval);
+            clearInterval(interval);
             let msg = err.message || 'שגיאה לא ידועה';
             if (msg.includes('401') || msg.includes('authentication')) msg = 'מפתח API שגוי. ודאו שהוא תקין ופעיל.';
-            if (msg.includes('429')) msg = 'חרגתם ממגבלת הבקשות. אנא המתינו דקה ונסו שוב.';
-            if (msg.includes('Failed to fetch') || msg.includes('network')) msg = 'שגיאת רשת. ודאו שאתם מחוברים לאינטרנט ונסו שוב.';
+            if (msg.includes('429'))                                    msg = 'חרגתם ממגבלת הבקשות. המתינו דקה ונסו שוב.';
+            if (msg.includes('Failed to fetch') || msg.includes('network')) msg = 'שגיאת רשת. ודאו שאתם מחוברים לאינטרנט.';
             showError(msg);
         } finally {
             document.getElementById('searchBtn').disabled = false;
@@ -496,18 +676,17 @@
 
     // ── Claude API call ──────────────────────────────────────────
     async function callClaudeAPI(apiKey, productType) {
-        const systemPrompt = `You are a product expert. Return ONLY a raw JSON object. No markdown. No explanation. No text before or after.
+        const systemPrompt = `You are a product expert. Return ONLY a raw JSON object. No markdown. No explanation.
 
-Exact schema - 2 products per category, all Hebrew values, extremely concise:
-{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X"}],"durable":[{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"}],"value":[{"name":"X","brand":"X","price":"X","d":7,"q":8,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":7,"q":7,"f1":"X","f2":"X","pro":"X","con":"X"}],"budget":[{"name":"X","brand":"X","price":"X","d":6,"q":6,"f1":"X","f2":"X","pro":"X","con":"X"},{"name":"X","brand":"X","price":"X","d":5,"q":6,"f1":"X","f2":"X","pro":"X","con":"X"}]}}
+Exact schema - 2 products per category, Hebrew values, concise:
+{"searchSummary":"X","categories":{"premium":[{"name":"X","brand":"X","price":"X","d":9,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":8,"q":9,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}],"durable":[{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":9,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}],"value":[{"name":"X","brand":"X","price":"X","d":7,"q":8,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":7,"q":7,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}],"budget":[{"name":"X","brand":"X","price":"X","d":6,"q":6,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"},{"name":"X","brand":"X","price":"X","d":5,"q":6,"f1":"X","f2":"X","pro":"X","con":"X","img":"english keywords"}]}}
 
-Field rules:
-- name, brand, f1, f2, pro, con: max 4 Hebrew words each
-- price: ILS range like "₪200-300"
-- d = durability 1-10, q = quality 1-10
+Rules:
+- name, brand, f1, f2, pro, con: max 4 Hebrew words
+- price: ILS like "₪200-300"
+- d=durability 1-10, q=quality 1-10
+- img: 2-3 English words for image search (e.g. "nike running shoes")
 - searchSummary: max 5 Hebrew words`;
-
-        const userPrompt = `Product: "${productType}"`;
 
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -521,33 +700,22 @@ Field rules:
                 model: MODEL,
                 max_tokens: 16000,
                 system: systemPrompt,
-                messages: [{ role: 'user', content: userPrompt }],
+                messages: [{ role: 'user', content: `Product: "${productType}"` }],
             }),
         });
 
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errBody}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
 
         const json = await response.json();
-        let text = json.content?.[0]?.text || '';
+        let text = (json.content?.[0]?.text || '')
+            .replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
-        // Strip markdown code blocks if present
-        text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-
-        // Extract JSON object
-        const start = text.indexOf('{');
-        const end   = text.lastIndexOf('}');
+        const start = text.indexOf('{'), end = text.lastIndexOf('}');
         if (start === -1 || end === -1) throw new Error('תגובה לא תקינה מה-AI. נסה שוב.');
-        const jsonStr = text.slice(start, end + 1);
 
         let parsed;
-        try {
-            parsed = JSON.parse(jsonStr);
-        } catch (e) {
-            throw new Error(`שגיאה בפענוח התגובה: ${e.message}`);
-        }
+        try { parsed = JSON.parse(text.slice(start, end + 1)); }
+        catch (e) { throw new Error(`שגיאה בפענוח התגובה: ${e.message}`); }
 
         if (!parsed.categories) throw new Error('מבנה נתונים שגוי בתגובה.');
         return parsed;
@@ -556,37 +724,25 @@ Field rules:
     // ── Render results ───────────────────────────────────────────
     function renderResults(query, data) {
         document.getElementById('loadingSection').style.display = 'none';
+        document.getElementById('resultTitle').textContent   = query;
+        document.getElementById('resultSummary').textContent = data.searchSummary || '';
 
-        document.getElementById('resultTitle').textContent    = query;
-        document.getElementById('resultSummary').textContent  = data.searchSummary || '';
-
-        const categories = [
-            { key: 'premium', containerId: 'premiumCards' },
-            { key: 'durable', containerId: 'durableCards' },
-            { key: 'value',   containerId: 'valueCards'   },
-            { key: 'budget',  containerId: 'budgetCards'  },
-        ];
-
-        categories.forEach(({ key, containerId }) => {
-            const container = document.getElementById(containerId);
-            const products  = data.categories?.[key] || [];
-            container.innerHTML = products.map(p => renderCard(p, key)).join('');
-        });
+        [['premium','premiumCards'],['durable','durableCards'],['value','valueCards'],['budget','budgetCards']]
+            .forEach(([key, id]) => {
+                document.getElementById(id).innerHTML =
+                    (data.categories?.[key] || []).map(p => renderCard(p, key)).join('');
+            });
 
         document.getElementById('resultsSection').style.display = 'block';
         document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // ── Keyboard shortcut ────────────────────────────────────────
-    document.getElementById('productInput').addEventListener('keydown', (e) => {
+    // ── Init ────────────────────────────────────────────────────
+    document.getElementById('productInput').addEventListener('keydown', e => {
         if (e.key === 'Enter') startSearch();
     });
-
-    // ── Init: check if API key exists ────────────────────────────
     window.addEventListener('load', () => {
-        if (!getApiKey()) {
-            document.getElementById('apiSetupSection').style.display = 'block';
-        }
+        if (!getApiKey()) document.getElementById('apiSetupSection').style.display = 'block';
     });
 </script>
 </body>
