@@ -353,7 +353,8 @@
 
             for (let week = 1; week <= duration; week++) {
                 const phase = getPhase(week, duration);
-                const weekPlan = { weekNumber: week, workouts: [], phase: phase.name };
+                const weekLabel = hasAerobicGoal ? phase.name : `שבוע ${week}`;
+                const weekPlan = { weekNumber: week, workouts: [], phase: weekLabel };
                 const intensityMultiplier = 1 + (Math.floor((week - 1) / 2) * 0.1);
                 const runningDuration = getRunningDuration(enrichedCardioTarget.runningLevel, week, duration);
 
@@ -365,7 +366,7 @@
                         const sessionNum = (week - 1) * workoutsPerWeek + day;
                         const exercises = generateStrengthWorkout(goals, activityLevel, intensityMultiplier, muscleGroups, workoutDuration, userData.availableEquipment || [], week + continuationOffset, sessionNum, userData.strengthExperience || '', systemPromptText);
                         const exercisesWithWeights = addWeightRecommendations(exercises, userData, week);
-                        workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null, phase: phase.name };
+                        workout = { day, type: 'כוח', exercises: exercisesWithWeights, completed: false, feedback: null, difficulty: null, phase: `שבוע ${week}` };
 
                     } else if (hasAerobicGoal) {
                         // Every session = run + strength at the end (no separate strength days)
