@@ -3259,7 +3259,7 @@
                                         <input
                                             type="number"
                                             value={exercise.sets}
-                                            onChange={(e) => onEdit('sets', parseInt(e.target.value))}
+                                            onChange={(e) => onEdit('sets', parseInt(e.target.value) || 0)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                                         />
                                     </div>
@@ -3271,7 +3271,7 @@
                                         <input
                                             type="number"
                                             value={exercise.reps}
-                                            onChange={(e) => onEdit('reps', parseInt(e.target.value))}
+                                            onChange={(e) => onEdit('reps', parseInt(e.target.value) || 0)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                                         />
                                     </div>
@@ -3307,7 +3307,7 @@
                                         <input
                                             type="number"
                                             value={exercise.rest}
-                                            onChange={(e) => onEdit('rest', parseInt(e.target.value))}
+                                            onChange={(e) => onEdit('rest', parseInt(e.target.value) || 0)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                                         />
                                     </div>
