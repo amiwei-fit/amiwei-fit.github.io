@@ -1420,7 +1420,7 @@
             }
             
             // General cardio workout (non-running focused)
-            const cardioDuration = parseInt(workoutDuration);
+            const cardioDuration = parseInt(workoutDuration) || 60;
             let intensity;
             if (level === 'מתחיל') {
                 intensity = 'קל-בינוני';
