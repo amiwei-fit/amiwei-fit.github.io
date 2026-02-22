@@ -2892,6 +2892,7 @@
             const [showSuggestions, setShowSuggestions] = useState(false);
             const [aiSuggestion, setAiSuggestion] = useState('');
             const [systemPrompt, setSystemPrompt] = useState('');
+            const [addMenuOpen, setAddMenuOpen] = useState(null);
 
             const currentWeek = workoutPlan.weeks[selectedWeek];
 
@@ -2912,6 +2913,21 @@
                 };
                 updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises.push(newExercise);
                 onUpdatePlan(updatedPlan);
+                setAddMenuOpen(null);
+            };
+
+            const handleAddRunningExercise = (weekIndex, workoutIndex) => {
+                const updatedPlan = { ...workoutPlan };
+                const newExercise = {
+                    name: 'ריצה',
+                    duration: '30 דקות',
+                    intensity: 'בינוני',
+                    sets: 1,
+                    notes: ''
+                };
+                updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises.push(newExercise);
+                onUpdatePlan(updatedPlan);
+                setAddMenuOpen(null);
             };
 
             const handleRemoveExercise = (weekIndex, workoutIndex, exerciseIndex) => {
@@ -3059,12 +3075,34 @@
                                                 <span className={`text-3xl ${workout.type === 'כוח' ? '🏋️' : '🏃'}`}></span>
                                                 יום {workout.day} - אימון {workout.type}
                                             </h3>
-                                            <button
-                                                onClick={() => handleAddExercise(selectedWeek, workoutIndex)}
-                                                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold transition"
-                                            >
-                                                + הוסף תרגיל
-                                            </button>
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setAddMenuOpen(
+                                                        addMenuOpen && addMenuOpen.w === selectedWeek && addMenuOpen.i === workoutIndex
+                                                            ? null
+                                                            : { w: selectedWeek, i: workoutIndex }
+                                                    )}
+                                                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold transition"
+                                                >
+                                                    + הוסף תרגיל ▾
+                                                </button>
+                                                {addMenuOpen && addMenuOpen.w === selectedWeek && addMenuOpen.i === workoutIndex && (
+                                                    <div className="absolute left-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                                                        <button
+                                                            onClick={() => handleAddExercise(selectedWeek, workoutIndex)}
+                                                            className="w-full text-right px-4 py-2 text-sm hover:bg-gray-100 rounded-t-lg flex items-center gap-2"
+                                                        >
+                                                            🏋️ תרגיל כוח
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleAddRunningExercise(selectedWeek, workoutIndex)}
+                                                            className="w-full text-right px-4 py-2 text-sm hover:bg-gray-100 rounded-b-lg flex items-center gap-2"
+                                                        >
+                                                            🏃 ריצה
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
 
                                         <div className="space-y-3">
