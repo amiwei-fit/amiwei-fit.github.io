@@ -2273,7 +2273,7 @@
 
             const handleSavePlan = async () => {
                 const trainee = {
-                    id: Date.now().toString(),
+                    id: crypto.randomUUID(),
                     ...formData,
                     workoutPlan: generatedPlan,
                     createdAt: new Date().toISOString()
