@@ -712,7 +712,7 @@
                 // Pure bodyweight beginner FBW (calisthenics based on XLSX document)
                 exercises = [
                     { name: 'סקוואט (Squat)', sets: setsPerExercise, reps: '10-15', rest: 90, notes: `רגליים קדמיות. ${progressionNote}` },
-                    { name: 'שכיבות סמיכה ברוחב כתפיים (Push-ups)', sets: setsPerExercise, reps: '10-15', rest: 90, notes: 'חזה, כתפיים, טריצפס.' },
+                    { name: 'נגיעות כתף (Shoulder Taps)', sets: setsPerExercise, reps: '10 לכל צד', rest: 60, notes: 'חיזוק ליבה ויציבות כתף. חלופה מומלצת לשכיבות סמיכה עד שמבצעים 8+ חזרות. שמור על אגן יציב.' },
                     { name: 'סופרמן - עלייה, שחייה, ירידה', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'גב תחתון, גלוטס.' },
                     { name: 'לאנג\'ים (Lunges)', sets: setsPerExercise, reps: '10 לכל רגל', rest: 60, notes: 'רגליים ושיווי משקל.' },
                     { name: 'פלאנק (Plank)', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'ליבה.' },
@@ -1034,7 +1034,7 @@
                         // Beginner-Intermediate bodyweight
                         [
                             { name: 'סקוואט (Squat)', sets: setsLarge, reps: '15-20', rest: 60, notes: 'רגליים קדמיות.' },
-                            { name: 'שכיבות סמיכה רגולריות', sets: setsLarge, reps: '10-15', rest: 60, notes: 'חזה, כתף, טריצפס.' },
+                            { name: 'שכיבת סמיכה + Shoulder Tap לסירוגין', sets: setsLarge, reps: '8-10', rest: 60, notes: 'ביצוע: שכיבת סמיכה → tap ימין → שכיבת סמיכה → tap שמאל. חזה, כתפיים, ליבה. מעבר לשכיבות סמיכה מלאות כשמגיעים ל-8+ חזרות.' },
                             { name: 'סופרמן - עלייה, שחייה, ירידה', sets: 3, duration: '30 שניות', rest: 60, notes: 'גב תחתון, גלוטס.' },
                             { name: 'פלאנק', sets: 3, duration: '45-60 שניות', rest: 60, notes: 'ליבה.' },
                             { name: 'לאנג\'ים', sets: setsLarge, reps: '12 לכל רגל', rest: 60, notes: 'רגליים.' },
@@ -1273,9 +1273,15 @@
                     { name: 'פלאנק', sets: 3, duration: '45 שניות', rest: 60, notes: 'ליבה' }
                 ];
             } else {
+                // Bodyweight: choose push-up variation based on level
+                const pushExercise = level === 'מתחיל'
+                    ? { name: 'נגיעות כתף (Shoulder Taps)', sets: 4, reps: '10 לכל צד', rest: 60, notes: 'חיזוק ליבה ויציבות כתף. חלופה מומלצת עד שמבצעים 8+ שכיבות סמיכה.' }
+                    : level === 'בינוני'
+                        ? { name: 'שכיבת סמיכה + Shoulder Tap לסירוגין', sets: 4, reps: '8-10', rest: 60, notes: 'ביצוע: שכיבת סמיכה → tap ימין → שכיבת סמיכה → tap שמאל. חזה, כתפיים, ליבה.' }
+                        : { name: 'שכיבות סמיכה', sets: 4, reps: '15', rest: 60, notes: 'חזה וזרועות' };
                 exercises = [
                     { name: 'סקוואט עמוק', sets: 4, reps: '20', rest: 60, notes: 'רגליים' },
-                    { name: 'שכיבות סמיכה', sets: 4, reps: '15', rest: 60, notes: 'חזה וזרועות' },
+                    pushExercise,
                     { name: 'חתירה אוסטרלית (Australian Pull-ups)', sets: 3, reps: '12', rest: 90, notes: 'גב - על מוט נמוך' },
                     { name: 'לאנג\'ים', sets: 3, reps: '12 לכל רגל', rest: 60, notes: 'רגליים' },
                     { name: 'פלאנק', sets: 3, duration: '45 שניות', rest: 60, notes: 'ליבה' }
@@ -2897,7 +2903,8 @@
                     name: 'תרגיל חדש',
                     sets: 3,
                     reps: 10,
-                    rest: 60
+                    rest: 60,
+                    notes: ''
                 };
                 updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises.push(newExercise);
                 onUpdatePlan(updatedPlan);
@@ -2906,6 +2913,15 @@
             const handleRemoveExercise = (weekIndex, workoutIndex, exerciseIndex) => {
                 const updatedPlan = { ...workoutPlan };
                 updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises.splice(exerciseIndex, 1);
+                onUpdatePlan(updatedPlan);
+            };
+
+            const handleMoveExercise = (weekIndex, workoutIndex, exerciseIndex, direction) => {
+                const updatedPlan = { ...workoutPlan };
+                const exercises = updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises;
+                const targetIndex = exerciseIndex + direction;
+                if (targetIndex < 0 || targetIndex >= exercises.length) return;
+                [exercises[exerciseIndex], exercises[targetIndex]] = [exercises[targetIndex], exercises[exerciseIndex]];
                 onUpdatePlan(updatedPlan);
             };
 
@@ -3052,12 +3068,16 @@
                                                 <ExerciseEditor
                                                     key={exerciseIndex}
                                                     exercise={exercise}
-                                                    onEdit={(field, value) => 
+                                                    exerciseIndex={exerciseIndex}
+                                                    totalExercises={workout.exercises.length}
+                                                    onEdit={(field, value) =>
                                                         handleExerciseEdit(selectedWeek, workoutIndex, exerciseIndex, field, value)
                                                     }
-                                                    onRemove={() => 
+                                                    onRemove={() =>
                                                         handleRemoveExercise(selectedWeek, workoutIndex, exerciseIndex)
                                                     }
+                                                    onMoveUp={() => handleMoveExercise(selectedWeek, workoutIndex, exerciseIndex, -1)}
+                                                    onMoveDown={() => handleMoveExercise(selectedWeek, workoutIndex, exerciseIndex, 1)}
                                                 />
                                             ))}
                                         </div>
@@ -3089,7 +3109,7 @@
         }
 
         // Exercise Editor Component
-        function ExerciseEditor({ exercise, onEdit, onRemove }) {
+        function ExerciseEditor({ exercise, onEdit, onRemove, onMoveUp, onMoveDown, exerciseIndex, totalExercises }) {
             const [isEditing, setIsEditing] = useState(false);
 
             if (isEditing) {
@@ -3335,7 +3355,22 @@
 
             return (
                 <div className="bg-gray-50 p-4 rounded-lg hover:bg-gray-100 transition">
-                    <div className="flex justify-between items-start">
+                    <div className="flex gap-2 items-start">
+                        {/* Reorder arrows */}
+                        <div className="flex flex-col gap-0.5 pt-0.5 shrink-0">
+                            <button
+                                onClick={onMoveUp}
+                                disabled={exerciseIndex === 0}
+                                title="הזז למעלה"
+                                className="w-6 h-6 flex items-center justify-center rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-20 text-gray-600 text-xs leading-none transition"
+                            >▲</button>
+                            <button
+                                onClick={onMoveDown}
+                                disabled={exerciseIndex >= totalExercises - 1}
+                                title="הזז למטה"
+                                className="w-6 h-6 flex items-center justify-center rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-20 text-gray-600 text-xs leading-none transition"
+                            >▼</button>
+                        </div>
                         <div className="flex-1">
                             <div className="font-semibold text-gray-800 mb-2">{exercise.name}</div>
                             <div className="text-gray-600 text-sm space-y-1">
