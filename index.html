@@ -245,6 +245,14 @@
             });
         };
 
+        // Returns a YouTube search URL demonstrating proper form for a strength exercise.
+        // Extracts the English name from parentheses when available (e.g. "סקוואט (Squat)" → "Squat").
+        const getExerciseVideoUrl = (exerciseName) => {
+            const englishMatch = exerciseName.match(/\(([A-Za-z][^)]*)\)/);
+            const searchTerm = englishMatch ? englishMatch[1] : exerciseName;
+            return `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm + ' proper form tutorial')}`;
+        };
+
         // Workout generation algorithm
         const generateWorkoutPlan = (userData) => {
             const { weight, height, age, gender, activityLevel, workoutDuration, goals, muscleGroups, cardioTarget, weeklyWorkouts } = userData;
@@ -3488,6 +3496,11 @@
                                 )}
                                 {exercise.notes && <div className="text-purple-600 mt-2">💡 {exercise.notes}</div>}
                                 {exercise.tips && <div className="text-blue-600 mt-2">✨ {exercise.tips}</div>}
+                                {exercise.sets > 0 && (
+                                    <a href={getExerciseVideoUrl(exercise.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">
+                                        🎥 הדגמת התרגיל
+                                    </a>
+                                )}
                             </div>
                         </div>
                         <button
@@ -3936,6 +3949,11 @@ ${traineeLink}
                                                     )}
                                                     {exercise.notes && <div className="text-purple-600 mt-2">💡 {exercise.notes}</div>}
                                                     {exercise.tips && <div className="text-blue-600 mt-2">✨ {exercise.tips}</div>}
+                                                    {exercise.sets > 0 && (
+                                                        <a href={getExerciseVideoUrl(exercise.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">
+                                                            🎥 הדגמת התרגיל
+                                                        </a>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -4492,6 +4510,11 @@ ${traineeLink}
                                                     )}
                                                     {exercise.notes && <div className="text-purple-600 mt-2">💡 {exercise.notes}</div>}
                                                     {exercise.tips && <div className="text-blue-600 mt-2">✨ {exercise.tips}</div>}
+                                                    {exercise.sets > 0 && (
+                                                        <a href={getExerciseVideoUrl(exercise.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">
+                                                            🎥 הדגמת התרגיל
+                                                        </a>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
