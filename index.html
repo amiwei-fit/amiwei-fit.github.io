@@ -245,9 +245,46 @@
             });
         };
 
-        // Returns a YouTube search URL demonstrating proper form for a strength exercise.
-        // Extracts the English name from parentheses when available (e.g. "סקוואט (Squat)" → "Squat").
-        const getExerciseVideoUrl = (exerciseName) => {
+        // Returns a YouTube search URL for a strength exercise, using a keyword map
+        // for common exercises and falling back to a general search otherwise.
+        const getDefaultExerciseVideoUrl = (exerciseName) => {
+            const lower = exerciseName.toLowerCase();
+            const map = [
+                { keys: ['romanian deadlift', 'rdl', 'רומניאן'], url: 'https://www.youtube.com/results?search_query=romanian+deadlift+RDL+proper+form+tutorial' },
+                { keys: ['deadlift', 'דד-ליפט', 'דד ליפט'], url: 'https://www.youtube.com/results?search_query=deadlift+proper+form+tutorial' },
+                { keys: ['goblet squat', 'גובלט סקוואט'], url: 'https://www.youtube.com/results?search_query=goblet+squat+proper+form+tutorial' },
+                { keys: ['pistol squat', 'single leg squat'], url: 'https://www.youtube.com/results?search_query=pistol+squat+single+leg+squat+proper+form' },
+                { keys: ['squat', 'סקוואט'], url: 'https://www.youtube.com/results?search_query=barbell+squat+proper+form+tutorial' },
+                { keys: ['bench press', 'לחיצת חזה', 'incline press', 'decline press', 'chest press'], url: 'https://www.youtube.com/results?search_query=bench+press+proper+form+tutorial' },
+                { keys: ['leg press', 'לחיצת רגליים'], url: 'https://www.youtube.com/results?search_query=leg+press+proper+form+tutorial' },
+                { keys: ['lunge', 'לאנג', 'מכרע'], url: 'https://www.youtube.com/results?search_query=lunges+proper+form+tutorial' },
+                { keys: ['pull-up', 'pullup', 'chin-up', 'עליות מתח', 'חתירה אוסטרלית'], url: 'https://www.youtube.com/results?search_query=pull+up+proper+form+tutorial' },
+                { keys: ['lat pulldown', 'פולי עליון'], url: 'https://www.youtube.com/results?search_query=lat+pulldown+proper+form+tutorial' },
+                { keys: ['seated cable row', 'bent over row', 'barbell row', 'dumbbell row', 'חתיר'], url: 'https://www.youtube.com/results?search_query=barbell+row+cable+row+proper+form+tutorial' },
+                { keys: ['pike push', 'overhead press', 'shoulder press', 'לחיצת כתף', 'לחיצת כתפיים'], url: 'https://www.youtube.com/results?search_query=overhead+press+proper+form+tutorial' },
+                { keys: ['diamond push', 'tricep', 'skull', 'פשיטת מרפק'], url: 'https://www.youtube.com/results?search_query=tricep+extension+proper+form+tutorial' },
+                { keys: ['push-up', 'push up', 'שכיבות סמיכה', 'plyometric push'], url: 'https://www.youtube.com/results?search_query=push+ups+proper+form+tutorial' },
+                { keys: ['bicep', 'curl', 'כפיפת מרפק'], url: 'https://www.youtube.com/results?search_query=bicep+curl+proper+form+tutorial' },
+                { keys: ['plank', 'פלאנק'], url: 'https://www.youtube.com/results?search_query=plank+core+proper+form+tutorial' },
+                { keys: ['hip thrust', 'glute bridge', 'hip extension', 'הרמות אגן', 'kick back'], url: 'https://www.youtube.com/results?search_query=glute+bridge+hip+thrust+proper+form+tutorial' },
+                { keys: ['calf raise', 'עליות תאומים'], url: 'https://www.youtube.com/results?search_query=calf+raises+proper+form+tutorial' },
+                { keys: ['leg curl', 'hamstring curl', 'כפיפת ברכיים'], url: 'https://www.youtube.com/results?search_query=leg+curl+hamstring+curl+proper+form+tutorial' },
+                { keys: ['leg extension', 'פשיטת ברכיים'], url: 'https://www.youtube.com/results?search_query=leg+extension+machine+proper+form+tutorial' },
+                { keys: ['dip', 'דיפס'], url: 'https://www.youtube.com/results?search_query=dips+chest+triceps+proper+form+tutorial' },
+                { keys: ['nordic', 'נורדי'], url: 'https://www.youtube.com/results?search_query=nordic+hamstring+curl+proper+form+tutorial' },
+                { keys: ['step-up', 'step up'], url: 'https://www.youtube.com/results?search_query=step+up+box+exercise+proper+form+tutorial' },
+                { keys: ['cable fly', 'cable flys', 'פתיחות', 'fly', 'flies'], url: 'https://www.youtube.com/results?search_query=cable+fly+chest+proper+form+tutorial' },
+                { keys: ['superman'], url: 'https://www.youtube.com/results?search_query=superman+exercise+lower+back+proper+form' },
+                { keys: ['back extension', 'hyperextension', 'כיסא רומי', 'פשיטת גו'], url: 'https://www.youtube.com/results?search_query=back+extension+hyperextension+proper+form+tutorial' },
+                { keys: ['shoulder tap', 'נגיעות כתף'], url: 'https://www.youtube.com/results?search_query=shoulder+tap+plank+proper+form+tutorial' },
+                { keys: ['crunch', 'כפיפות בטן', 'sit-up', 'ab exercise'], url: 'https://www.youtube.com/results?search_query=crunches+ab+exercise+proper+form+tutorial' },
+                { keys: ['lateral step', 'clamshell', 'adduction', 'miniband'], url: 'https://www.youtube.com/results?search_query=resistance+band+hip+exercise+proper+form+tutorial' },
+                { keys: ['trx'], url: 'https://www.youtube.com/results?search_query=TRX+suspension+training+proper+form+tutorial' },
+            ];
+            for (const entry of map) {
+                if (entry.keys.some(k => lower.includes(k.toLowerCase()))) return entry.url;
+            }
+            // Fallback: extract English name from parentheses or use full name
             const englishMatch = exerciseName.match(/\(([A-Za-z][^)]*)\)/);
             const searchTerm = englishMatch ? englishMatch[1] : exerciseName;
             return `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm + ' proper form tutorial')}`;
@@ -435,6 +472,14 @@
                         }
                     }
 
+                    // Attach default video URLs to all strength exercises
+                    if (workout && workout.exercises) {
+                        workout.exercises = workout.exercises.map(ex =>
+                            (ex.sets > 0 && ex.videoUrl === undefined)
+                                ? { ...ex, videoUrl: getDefaultExerciseVideoUrl(ex.name) }
+                                : ex
+                        );
+                    }
                     weekPlan.workouts.push(workout);
                 }
 
@@ -3432,6 +3477,35 @@
                                 </div>
                             )}
 
+                            {exercise.sets > 0 && (
+                                <div className="bg-red-50 p-3 rounded border border-red-200">
+                                    <label className="block text-sm font-semibold text-red-800 mb-1">🎥 לינק לסרטון הדגמה</label>
+                                    <div className="flex gap-2 items-center">
+                                        <input
+                                            type="url"
+                                            value={exercise.videoUrl !== undefined ? exercise.videoUrl : getDefaultExerciseVideoUrl(exercise.name)}
+                                            onChange={(e) => onEdit('videoUrl', e.target.value)}
+                                            className="flex-1 px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-400 text-sm"
+                                            placeholder="https://www.youtube.com/watch?v=..."
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => onEdit('videoUrl', '')}
+                                            title="מחק לינק"
+                                            className="px-3 py-2 bg-red-200 hover:bg-red-300 text-red-700 rounded-lg text-sm transition"
+                                        >🗑️</button>
+                                    </div>
+                                    {(() => {
+                                        const vUrl = exercise.videoUrl !== undefined ? exercise.videoUrl : getDefaultExerciseVideoUrl(exercise.name);
+                                        return vUrl ? (
+                                            <a href={vUrl} target="_blank" rel="noopener noreferrer" className="text-red-600 text-xs mt-1 block hover:underline">
+                                                🔗 פתח לינק לבדיקה
+                                            </a>
+                                        ) : <span className="text-gray-400 text-xs mt-1 block">אין לינק — המתאמן לא יראה סרטון לתרגיל זה</span>;
+                                    })()}
+                                </div>
+                            )}
+
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => setIsEditing(false)}
@@ -3496,11 +3570,10 @@
                                 )}
                                 {exercise.notes && <div className="text-purple-600 mt-2">💡 {exercise.notes}</div>}
                                 {exercise.tips && <div className="text-blue-600 mt-2">✨ {exercise.tips}</div>}
-                                {exercise.sets > 0 && (
-                                    <a href={getExerciseVideoUrl(exercise.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">
-                                        🎥 הדגמת התרגיל
-                                    </a>
-                                )}
+                                {exercise.sets > 0 && (() => {
+                                    const vUrl = exercise.videoUrl !== undefined ? exercise.videoUrl : getDefaultExerciseVideoUrl(exercise.name);
+                                    return vUrl ? <a href={vUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">🎥 הדגמת התרגיל</a> : null;
+                                })()}
                             </div>
                         </div>
                         <button
@@ -3949,11 +4022,10 @@ ${traineeLink}
                                                     )}
                                                     {exercise.notes && <div className="text-purple-600 mt-2">💡 {exercise.notes}</div>}
                                                     {exercise.tips && <div className="text-blue-600 mt-2">✨ {exercise.tips}</div>}
-                                                    {exercise.sets > 0 && (
-                                                        <a href={getExerciseVideoUrl(exercise.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">
-                                                            🎥 הדגמת התרגיל
-                                                        </a>
-                                                    )}
+                                                    {exercise.sets > 0 && (() => {
+                                                        const vUrl = exercise.videoUrl !== undefined ? exercise.videoUrl : getDefaultExerciseVideoUrl(exercise.name);
+                                                        return vUrl ? <a href={vUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">🎥 הדגמת התרגיל</a> : null;
+                                                    })()}
                                                 </div>
                                             </div>
                                         ))}
@@ -4510,11 +4582,10 @@ ${traineeLink}
                                                     )}
                                                     {exercise.notes && <div className="text-purple-600 mt-2">💡 {exercise.notes}</div>}
                                                     {exercise.tips && <div className="text-blue-600 mt-2">✨ {exercise.tips}</div>}
-                                                    {exercise.sets > 0 && (
-                                                        <a href={getExerciseVideoUrl(exercise.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">
-                                                            🎥 הדגמת התרגיל
-                                                        </a>
-                                                    )}
+                                                    {exercise.sets > 0 && (() => {
+                                                        const vUrl = exercise.videoUrl !== undefined ? exercise.videoUrl : getDefaultExerciseVideoUrl(exercise.name);
+                                                        return vUrl ? <a href={vUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-red-500 text-xs mt-2 hover:underline">🎥 הדגמת התרגיל</a> : null;
+                                                    })()}
                                                 </div>
                                             </div>
                                         ))}
