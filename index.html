@@ -3423,10 +3423,10 @@
                                 {exercise.strides && <span className="block"><strong>מתגברות:</strong> {exercise.strides}</span>}
                                 {exercise.cooldown && <span className="block"><strong>התאוששות:</strong> {exercise.cooldown}</span>}
                                 {exercise.pace && <span className="block"><strong>קצב:</strong> {exercise.pace}</span>}
-                                {exercise.sets && <span className="inline-block mr-3">סטים: {exercise.sets}</span>}
-                                {exercise.reps && <span className="inline-block mr-3">חזרות: {exercise.reps}</span>}
-                                {exercise.duration && <span className="inline-block mr-3">משך: {exercise.duration}</span>}
-                                {exercise.rest && <span className="inline-block mr-3">מנוחה: {exercise.rest}″</span>}
+                                {!!exercise.sets && <span className="inline-block mr-3">סטים: {exercise.sets}</span>}
+                                {!!exercise.reps && <span className="inline-block mr-3">חזרות: {exercise.reps}</span>}
+                                {!!exercise.duration && <span className="inline-block mr-3">משך: {exercise.duration}</span>}
+                                {!!exercise.rest && <span className="inline-block mr-3">מנוחה: {exercise.rest}″</span>}
                                 {exercise.intensity && <span className="inline-block mr-3">עצימות: {exercise.intensity}</span>}
                                 {exercise.recommendedWeight && (
                                     <div className="bg-green-100 p-2 rounded mt-2 border border-green-300">
@@ -3871,10 +3871,10 @@ ${traineeLink}
                                                     {exercise.strides && <div><strong>מתגברות:</strong> {exercise.strides}</div>}
                                                     {exercise.cooldown && <div><strong>התאוששות:</strong> {exercise.cooldown}</div>}
                                                     {exercise.pace && <div><strong>קצב:</strong> {exercise.pace}</div>}
-                                                    {exercise.sets && <div>סטים: {exercise.sets}</div>}
-                                                    {exercise.reps && <div>חזרות: {exercise.reps}</div>}
-                                                    {exercise.duration && <div>משך: {exercise.duration}</div>}
-                                                    {exercise.rest && <div>מנוחה: {exercise.rest} שניות</div>}
+                                                    {!!exercise.sets && <div>סטים: {exercise.sets}</div>}
+                                                    {!!exercise.reps && <div>חזרות: {exercise.reps}</div>}
+                                                    {!!exercise.duration && <div>משך: {exercise.duration}</div>}
+                                                    {!!exercise.rest && <div>מנוחה: {exercise.rest} שניות</div>}
                                                     {exercise.intensity && <div>עצימות: {exercise.intensity}</div>}
                                                     {exercise.recommendedWeight && (
                                                         <div className="bg-green-100 p-2 rounded mt-2 border border-green-300">
@@ -4428,10 +4428,10 @@ ${traineeLink}
                                                     {exercise.cooldown && <div><strong>התאוששות:</strong> {exercise.cooldown}</div>}
                                                     {exercise.pace && <div><strong>קצב:</strong> {exercise.pace}</div>}
                                                     {exercise.intensity && <div><strong>עצימות:</strong> {exercise.intensity}</div>}
-                                                    {exercise.sets && <div>סטים: {exercise.sets}</div>}
-                                                    {exercise.reps && <div>חזרות: {exercise.reps}</div>}
-                                                    {exercise.duration && <div>משך: {exercise.duration}</div>}
-                                                    {exercise.rest && <div>מנוחה: {exercise.rest} שניות</div>}
+                                                    {!!exercise.sets && <div>סטים: {exercise.sets}</div>}
+                                                    {!!exercise.reps && <div>חזרות: {exercise.reps}</div>}
+                                                    {!!exercise.duration && <div>משך: {exercise.duration}</div>}
+                                                    {!!exercise.rest && <div>מנוחה: {exercise.rest} שניות</div>}
                                                     {exercise.recommendedWeight && (
                                                         <div className="bg-green-100 p-2 rounded mt-2 border border-green-300">
                                                             <strong className="text-green-800">💪 משקל מומלץ: {exercise.recommendedWeight}</strong>
