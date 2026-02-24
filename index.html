@@ -291,6 +291,135 @@
             return `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm + ' proper form tutorial')}`;
         };
 
+        // Claude AI plan generation
+        const generatePlanWithClaude = async (formData, apiKey) => {
+            const SYSTEM_PROMPT = `You are an expert personal trainer and running coach certified by UESCA (United States Elite Coaches Association) with deep knowledge of Jack Daniels' Running Formula. You create scientifically-backed, personalized workout plans.
+
+Training principles you follow:
+- Progressive overload: gradually increase volume/intensity (no more than 10% per week)
+- 80/20 rule: 80% easy aerobic, 20% hard efforts
+- Periodization: base → build → peak → taper phases
+- Jack Daniels pace zones: Easy (59-74% HRmax), Marathon (75-84%), Threshold (82-88%), Interval (95-100%), Repetition (105%+)
+- Beginner runners start with walk-to-run intervals before continuous running
+- Strength training 2-3x/week with compound movements; runners need hip, core, and single-leg strength
+- Rest and recovery are essential — include deload weeks every 3-4 weeks
+- Specificity: train for the goal (marathon prep vs fat loss vs muscle building require different approaches)
+
+You must respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanations, just pure JSON):
+{
+  "duration": <number of weeks>,
+  "workoutsPerWeek": <number>,
+  "workoutDuration": <minutes per session>,
+  "weeks": [
+    {
+      "weekNumber": 1,
+      "phase": "בסיס",
+      "workouts": [
+        {
+          "day": "יום א'",
+          "type": "כוח",
+          "completed": false,
+          "feedback": null,
+          "difficulty": null,
+          "exercises": [
+            {
+              "name": "exercise name in Hebrew",
+              "sets": 3,
+              "reps": "10",
+              "rest": 90,
+              "notes": "optional coaching note in Hebrew"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "createdAt": "${new Date().toISOString()}",
+  "muscleGroups": [],
+  "cardioTarget": {}
+}
+
+Rules:
+- All text (exercise names, phases, day names, notes) MUST be in Hebrew
+- Day names: יום א', יום ב', יום ג', יום ד', יום ה', יום ו', שבת
+- Workout types: כוח / ריצה קלה / ריצה טמפו / אינטרוול / מנוחה פעילה
+- For running workouts, list the run structure as exercises (e.g. name: "ריצה קלה 30 דקות", sets: 1, reps: "30 דק'", rest: 0)
+- exercises array must never be empty
+- Respect the trainee's available equipment, fitness level, and any special instructions
+- If trainee is a beginner runner, start with walk-run intervals progressing to continuous running`;
+
+            const userMessage = `Create a personalized workout plan for this trainee:
+
+Name: ${formData.name || 'Trainee'}
+Age: ${formData.age || 'Unknown'}
+Gender: ${formData.gender === 'male' ? 'Male' : formData.gender === 'female' ? 'Female' : 'Not specified'}
+Weight: ${formData.weight ? formData.weight + 'kg' : 'Not specified'}
+Height: ${formData.height ? formData.height + 'cm' : 'Not specified'}
+Activity level: ${formData.activityLevel || 'Not specified'}
+Goals: ${(formData.goals || []).join(', ') || 'General fitness'}
+Muscle groups to focus on: ${(formData.muscleGroups || []).join(', ') || 'Full body'}
+Available equipment: ${(formData.availableEquipment || []).join(', ') || 'None specified'}
+Workouts per week: ${formData.weeklyWorkouts || 3}
+Session duration: ${formData.workoutDuration || 60} minutes
+Plan duration: ${formData.planWeeks || 12} weeks
+Running level: ${formData.runningLevel || 'Not a runner'}
+${formData.raceGoal ? 'Race goal: ' + formData.raceGoal : ''}
+${formData.current5kTime ? '5k time: ' + formData.current5kTime : ''}
+${formData.weeklyMileage ? 'Weekly mileage: ' + formData.weeklyMileage + 'km' : ''}
+${formData.injuryHistory ? 'Injury history: ' + formData.injuryHistory : ''}
+Special instructions: ${formData.customInstructions || 'None'}
+
+Generate the complete plan now as JSON only.`;
+
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-allow-browser': 'true'
+                },
+                body: JSON.stringify({
+                    model: 'claude-opus-4-6',
+                    max_tokens: 8000,
+                    system: SYSTEM_PROMPT,
+                    messages: [{ role: 'user', content: userMessage }]
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `שגיאת API: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const rawText = data.content?.[0]?.text || '';
+
+            // Extract JSON from the response (Claude might wrap it in markdown)
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מה-AI');
+
+            const plan = JSON.parse(jsonMatch[0]);
+
+            // Validate and attach video URLs to exercises
+            if (plan.weeks && Array.isArray(plan.weeks)) {
+                plan.weeks.forEach(week => {
+                    if (week.workouts) {
+                        week.workouts.forEach(workout => {
+                            if (workout.exercises) {
+                                workout.exercises = workout.exercises.map(ex => ({
+                                    ...ex,
+                                    videoUrl: ex.videoUrl || getDefaultExerciseVideoUrl(ex.name)
+                                }));
+                            }
+                        });
+                    }
+                });
+            }
+
+            return plan;
+        };
+
         // Workout generation algorithm
         const generateWorkoutPlan = (userData) => {
             const { weight, height, age, gender, activityLevel, workoutDuration, goals, muscleGroups, cardioTarget, weeklyWorkouts } = userData;
@@ -2006,6 +2135,8 @@
             const [continuationTrainee, setContinuationTrainee] = useState(null);
             const [loading, setLoading] = useState(true);
             const [showArchive, setShowArchive] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const [settingsApiKey, setSettingsApiKey] = useState(() => localStorage.getItem('claudeApiKey') || '');
 
             useEffect(() => {
                 loadTrainees();
@@ -2056,6 +2187,11 @@
                         alert('שגיאה במחיקת מתאמן');
                     }
                 }
+            };
+
+            const handleSaveSettings = () => {
+                localStorage.setItem('claudeApiKey', settingsApiKey.trim());
+                setShowSettings(false);
             };
 
             if (loading) {
@@ -2141,12 +2277,21 @@
                                 <h1 className="text-2xl font-bold">דשבורד מאמן 🎯</h1>
                                 <p className="text-purple-100 mt-1">ניהול מתאמנים ותוכניות אימון</p>
                             </div>
-                            <button
-                                onClick={handleLogout}
-                                className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
-                            >
-                                התנתק
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowSettings(true)}
+                                    className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
+                                    title="הגדרות"
+                                >
+                                    ⚙️ הגדרות
+                                </button>
+                                <button
+                                    onClick={handleLogout}
+                                    className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
+                                >
+                                    התנתק
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -2264,6 +2409,50 @@
                             )}
                         </div>
                     </div>
+
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full" dir="rtl">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-6">⚙️ הגדרות</h2>
+
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        מפתח API של Claude (Anthropic)
+                                    </label>
+                                    <p className="text-sm text-gray-500 mb-3">
+                                        כדי להשתמש בבינה מלאכותית ליצירת תוכניות אימון, הכנס כאן את מפתח ה-API שלך מ-Anthropic.
+                                        המפתח נשמר מקומית בדפדפן בלבד ואינו נשלח לשרת.
+                                    </p>
+                                    <input
+                                        type="password"
+                                        value={settingsApiKey}
+                                        onChange={e => setSettingsApiKey(e.target.value)}
+                                        placeholder="sk-ant-..."
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                                        dir="ltr"
+                                    />
+                                    {settingsApiKey && (
+                                        <p className="text-xs text-green-600 mt-2">✓ מפתח API הוגדר</p>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={handleSaveSettings}
+                                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition"
+                                    >
+                                        שמור
+                                    </button>
+                                    <button
+                                        onClick={() => setShowSettings(false)}
+                                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-xl transition"
+                                    >
+                                        ביטול
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -2272,6 +2461,9 @@
         function CreateTraineePlan({ onBack, onComplete, sourceTrainee }) {
             const [step, setStep] = useState('form'); // 'form' or 'preview'
             const [generatedPlan, setGeneratedPlan] = useState(null);
+            const [aiLoading, setAiLoading] = useState(false);
+            const [aiError, setAiError] = useState(null);
+            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
 
             const [formData, setFormData] = useState(() => {
                 if (sourceTrainee) {
@@ -2390,6 +2582,21 @@
                 const updatedFormData = { ...formData, _systemPrompt: systemPrompt || formData.customInstructions || '' };
                 const workoutPlan = generateWorkoutPlan(updatedFormData);
                 setGeneratedPlan(workoutPlan);
+            };
+
+            const handleAiGenerate = async (e) => {
+                e.preventDefault();
+                setAiError(null);
+                setAiLoading(true);
+                try {
+                    const plan = await generatePlanWithClaude(formData, claudeApiKey);
+                    setGeneratedPlan(plan);
+                    setStep('preview');
+                } catch (err) {
+                    setAiError(err.message || 'שגיאה ביצירת תוכנית עם AI');
+                } finally {
+                    setAiLoading(false);
+                }
             };
 
             if (step === 'preview') {
@@ -2980,12 +3187,38 @@
                                     />
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg"
-                                >
-                                    צור תוכנית ועבור לתצוגה מקדימה
-                                </button>
+                                {aiError && (
+                                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                                        ⚠️ {aiError}
+                                    </div>
+                                )}
+
+                                <div className={claudeApiKey ? 'grid grid-cols-1 gap-3' : ''}>
+                                    {claudeApiKey && !sourceTrainee && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAiGenerate}
+                                            disabled={aiLoading}
+                                            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                                        >
+                                            {aiLoading ? (
+                                                <>
+                                                    <span className="animate-spin">⏳</span>
+                                                    יוצר תוכנית עם AI... (עד דקה)
+                                                </>
+                                            ) : (
+                                                <>🤖 צור תוכנית עם AI (Claude)</>
+                                            )}
+                                        </button>
+                                    )}
+                                    <button
+                                        type="submit"
+                                        disabled={aiLoading}
+                                        className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg"
+                                    >
+                                        צור תוכנית ועבור לתצוגה מקדימה
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
