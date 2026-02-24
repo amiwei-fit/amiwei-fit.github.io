@@ -293,6 +293,11 @@
 
         // Claude AI plan generation
         const generatePlanWithClaude = async (formData, apiKey) => {
+            const trainerContext = localStorage.getItem('trainerContext') || '';
+            const trainerContextSection = trainerContext
+                ? `\n\nTRAINER'S PERSONAL METHODOLOGY AND DOCUMENTS (highest priority — follow these above all else):\n${trainerContext}`
+                : '';
+
             const SYSTEM_PROMPT = `You are an expert personal trainer and running coach certified by UESCA (United States Elite Coaches Association) with deep knowledge of Jack Daniels' Running Formula. You create scientifically-backed, personalized workout plans.
 
 Training principles you follow:
@@ -303,7 +308,7 @@ Training principles you follow:
 - Beginner runners start with walk-to-run intervals before continuous running
 - Strength training 2-3x/week with compound movements; runners need hip, core, and single-leg strength
 - Rest and recovery are essential — include deload weeks every 3-4 weeks
-- Specificity: train for the goal (marathon prep vs fat loss vs muscle building require different approaches)
+- Specificity: train for the goal (marathon prep vs fat loss vs muscle building require different approaches)${trainerContextSection}
 
 You must respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanations, just pure JSON):
 {
@@ -2137,6 +2142,7 @@ Generate the complete plan now as JSON only.`;
             const [showArchive, setShowArchive] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
             const [settingsApiKey, setSettingsApiKey] = useState(() => localStorage.getItem('claudeApiKey') || '');
+            const [settingsTrainerContext, setSettingsTrainerContext] = useState(() => localStorage.getItem('trainerContext') || '');
 
             useEffect(() => {
                 loadTrainees();
@@ -2191,6 +2197,7 @@ Generate the complete plan now as JSON only.`;
 
             const handleSaveSettings = () => {
                 localStorage.setItem('claudeApiKey', settingsApiKey.trim());
+                localStorage.setItem('trainerContext', settingsTrainerContext.trim());
                 setShowSettings(false);
             };
 
@@ -2433,6 +2440,26 @@ Generate the complete plan now as JSON only.`;
                                     />
                                     {settingsApiKey && (
                                         <p className="text-xs text-green-600 mt-2">✓ מפתח API הוגדר</p>
+                                    )}
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        הקשר אימון אישי (מסמכים / מתודולוגיה)
+                                    </label>
+                                    <p className="text-sm text-gray-500 mb-3">
+                                        הכנס כאן קטעים ממסמכי האימון שלך, שיטת האימון שלך, עקרונות ייחודיים, או כל מידע שתרצה ש-AI ישתמש בו ביצירת תוכניות.
+                                        לדוגמה: תוכלול מ-NotebookLM, ציטוטים מספרים מקצועיים, הפרוטוקולים האישיים שלך.
+                                    </p>
+                                    <textarea
+                                        value={settingsTrainerContext}
+                                        onChange={e => setSettingsTrainerContext(e.target.value)}
+                                        rows={8}
+                                        placeholder="לדוגמה:&#10;- אני מאמין באימוני עצימות גבוהה 2 פעמים בשבוע עם שאר ימים קלים&#10;- מתאמני ריצה תמיד מקבלים אימון כוח לגב תחתון ולחגורת ירך&#10;- שיטת פירמידה לשיפור כוח מקסימלי&#10;- הפרוטוקול שלי לריצה: חימום 10 דק + ריצה 30 דק + קירור 5 דק"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-y text-sm"
+                                    />
+                                    {settingsTrainerContext && (
+                                        <p className="text-xs text-green-600 mt-2">✓ {settingsTrainerContext.length} תווים — הקשר אישי הוגדר</p>
                                     )}
                                 </div>
 
