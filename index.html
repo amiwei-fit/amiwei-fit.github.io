@@ -295,6 +295,14 @@
         const generateWorkoutPlan = (userData) => {
             const { weight, height, age, gender, activityLevel, workoutDuration, goals, muscleGroups, cardioTarget, weeklyWorkouts } = userData;
 
+            // Parse current continuous running ability from custom instructions BEFORE enrichedCardioTarget
+            // e.g. "יכול לרוץ 4 דקות רצוף", "4 דקות רצוף מקסימום", "4 דקות ברציפות"
+            const _instructionsText = userData._systemPrompt || userData.customInstructions || '';
+            const _continuousRunMatch =
+                _instructionsText.match(/(\d+(?:\.\d+)?)\s*דקות?\s*(?:רצוף|ברציפות|רצופות?)/i) ||
+                _instructionsText.match(/מקסימום\s+(\d+(?:\.\d+)?)\s*דקות?/i);
+            const customContinuousRunMinutes = _continuousRunMatch ? parseFloat(_continuousRunMatch[1]) : null;
+
             // --- Fix: merge top-level running fields into cardioTarget ---
             // (runningLevel, raceGoal etc. are stored as top-level formData fields, not inside cardioTarget)
             const enrichedCardioTarget = {
@@ -306,7 +314,8 @@
                 current10kTime:   userData.current10kTime    || cardioTarget.current10kTime    || '',
                 currentHalfTime:  userData.currentHalfTime   || cardioTarget.currentHalfTime   || '',
                 currentMarathonTime: userData.currentMarathonTime || cardioTarget.currentMarathonTime || '',
-                injuryHistory: userData.injuryHistory || ''
+                injuryHistory: userData.injuryHistory || '',
+                customContinuousRunMinutes,
             };
 
             const isMuscleBuilding = goals.includes('עלייה במסת שריר');
@@ -1537,7 +1546,7 @@
         // 6. פרטלק > אינטרוולים - creative fartlek preferred over rigid track intervals
         // 7. בסיס אירובי (Aerobic base) - foundation before quality, Lydiard method
         const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
-            const { runningLevel, raceGoal, current5kTime, current10kTime } = cardioTarget;
+            const { runningLevel, raceGoal, current5kTime, current10kTime, customContinuousRunMinutes } = cardioTarget;
             const duration = parseInt(workoutDuration);
 
             // Resolve personal pace zones from 5K (or 10K) time
@@ -1554,7 +1563,12 @@
             // Taper: shorter, easy + some quality to stay sharp
 
             if (runningLevel === 'beginner') {
-                return generateWalkToRunWorkout(week, duration);
+                // If custom instructions specify current running ability (e.g. "יכול לרוץ 4 דקות רצוף"),
+                // start the walk-to-run program at the matching phase instead of week 1.
+                const programStartWeek = customContinuousRunMinutes
+                    ? getWalkToRunStartWeek(customContinuousRunMinutes)
+                    : 1;
+                return generateWalkToRunWorkout(week + (programStartWeek - 1), duration);
             }
 
             return generateAdvancedRunningWorkout(weekInCycle, duration, runningLevel || 'intermediate', raceGoal || 'general', week, paceZones, phase, totalWeeks, runningSessionIdx);
@@ -1563,6 +1577,21 @@
         // Running Warmup Protocol (based on Ohio State / uploaded document)
         const getRunningWarmup = () => {
             return '5 דקות הליכה מהירה + תרגילי חימום: סיבובי ראש, סיבובי כתפיים לאחור, סיבובי זרועות, מעגלי ירכיים, סקוואטים בהליכה, ספיידרמן לאנג\'ים, הרמת ברכיים, בעיטות לישבן, סיבובי קרסול (10 חזרות כל תרגיל)';
+        };
+
+        // Maps current continuous running ability (minutes) to starting week in the walk-to-run program
+        const getWalkToRunStartWeek = (continuousMinutes) => {
+            if (continuousMinutes >= 30) return 16;
+            if (continuousMinutes >= 18) return 15;
+            if (continuousMinutes >= 12) return 14;
+            if (continuousMinutes >= 8)  return 13;
+            if (continuousMinutes >= 6)  return 12;
+            if (continuousMinutes >= 5)  return 11;
+            if (continuousMinutes >= 4)  return 10;
+            if (continuousMinutes >= 3)  return 9;
+            if (continuousMinutes >= 2)  return 7;
+            if (continuousMinutes >= 1)  return 4;
+            return 1;
         };
 
         // Walk-to-Run Program - Full 48-session plan (based on uploaded תוכנית מהליכה לריצה)
