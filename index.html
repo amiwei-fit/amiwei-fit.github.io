@@ -473,13 +473,28 @@
                         }
                     }
 
-                    // Attach default video URLs to all strength exercises
+                    // Post-process all exercises: attach video URLs + apply intensity modifier
                     if (workout && workout.exercises) {
-                        workout.exercises = workout.exercises.map(ex =>
-                            (ex.sets > 0 && ex.videoUrl === undefined)
-                                ? { ...ex, videoUrl: getDefaultExerciseVideoUrl(ex.name) }
-                                : ex
-                        );
+                        workout.exercises = workout.exercises.map(ex => {
+                            let updated = ex;
+                            // Attach default video URL for strength exercises
+                            if (ex.sets > 0 && ex.videoUrl === undefined) {
+                                updated = { ...updated, videoUrl: getDefaultExerciseVideoUrl(ex.name) };
+                            }
+                            // Apply intensity modifier from customInstructions ("הפחת/הגבר עצימות")
+                            if (intensityModifier !== 1.0 && ex.sets > 0) {
+                                const newSets = intensityModifier > 1.0
+                                    ? ex.sets + 1
+                                    : Math.max(2, ex.sets - 1);
+                                const newRest = intensityModifier < 1.0
+                                    ? Math.round((ex.rest || 90) * 1.2)
+                                    : intensityModifier > 1.0
+                                        ? Math.round((ex.rest || 90) * 0.85)
+                                        : ex.rest;
+                                updated = { ...updated, sets: newSets, rest: newRest };
+                            }
+                            return updated;
+                        });
                     }
                     weekPlan.workouts.push(workout);
                 }
