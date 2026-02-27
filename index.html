@@ -2292,6 +2292,7 @@ Generate the complete plan now as JSON only.`;
             const [trainees, setTrainees] = useState([]);
             const [showCreateForm, setShowCreateForm] = useState(false);
             const [sourceTrainee, setSourceTrainee] = useState(null);
+            const [draftTrainee, setDraftTrainee] = useState(null);
             const [selectedTrainee, setSelectedTrainee] = useState(null);
             const [editingTrainee, setEditingTrainee] = useState(null);
             const [continuationTrainee, setContinuationTrainee] = useState(null);
@@ -2351,6 +2352,23 @@ Generate the complete plan now as JSON only.`;
                         alert('שגיאה במחיקת מתאמן');
                     }
                 }
+            };
+
+            const handleDeleteDraft = async (e, draft) => {
+                e.stopPropagation();
+                if (window.confirm(`למחוק את הטיוטה של "${draft.name || 'ללא שם'}"?`)) {
+                    try {
+                        await storage.deleteTrainee(draft.id);
+                        await refreshTrainees();
+                    } catch (error) {
+                        alert('שגיאה במחיקת טיוטה');
+                    }
+                }
+            };
+
+            const handleOpenDraft = (draft) => {
+                setDraftTrainee(draft);
+                setShowCreateForm(true);
             };
 
             const handleSaveSettings = () => {
@@ -2420,18 +2438,21 @@ Generate the complete plan now as JSON only.`;
             if (showCreateForm) {
                 return (
                     <CreateTraineePlan
-                        onBack={() => { setShowCreateForm(false); setSourceTrainee(null); }}
+                        onBack={() => { setShowCreateForm(false); setSourceTrainee(null); setDraftTrainee(null); }}
                         onComplete={() => {
                             setShowCreateForm(false);
                             setSourceTrainee(null);
+                            setDraftTrainee(null);
                             refreshTrainees();
                         }}
                         sourceTrainee={sourceTrainee}
+                        draftTrainee={draftTrainee}
                     />
                 );
             }
 
-            const activeTrainees = trainees.filter(t => !t.archived);
+            const draftTrainees = trainees.filter(t => t.isDraft && !t.archived);
+            const activeTrainees = trainees.filter(t => !t.archived && !t.isDraft);
             const archivedTrainees = trainees.filter(t => t.archived);
             const displayTrainees = showArchive ? archivedTrainees : activeTrainees;
 
@@ -2471,6 +2492,53 @@ Generate the complete plan now as JSON only.`;
                                 צור תוכנית למתאמן חדש
                             </button>
                         </div>
+
+                        {!showArchive && draftTrainees.length > 0 && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl shadow-sm p-6 mb-4">
+                                <h2 className="text-lg font-bold text-yellow-800 mb-4 flex items-center gap-2">
+                                    📝 טיוטות ({draftTrainees.length})
+                                    <span className="text-sm font-normal text-yellow-600">— מתאמנים שפרטיהם לא הושלמו</span>
+                                </h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {draftTrainees.map(draft => (
+                                        <div
+                                            key={draft.id}
+                                            onClick={() => handleOpenDraft(draft)}
+                                            className="bg-white border-2 border-dashed border-yellow-300 p-4 rounded-xl cursor-pointer hover:border-yellow-400 hover:bg-yellow-50 transition-all"
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <div className="text-2xl mb-1">📝</div>
+                                                    <div className="font-bold text-gray-800">{draft.name || '(ללא שם)'}</div>
+                                                    {draft.email && <div className="text-xs text-gray-500 mt-0.5">{draft.email}</div>}
+                                                    <div className="text-xs text-yellow-700 mt-2">
+                                                        {[draft.age && `גיל ${draft.age}`, draft.activityLevel, (draft.goals||[]).slice(0,1).join('')].filter(Boolean).join(' · ')}
+                                                    </div>
+                                                    <div className="text-xs text-gray-400 mt-1">
+                                                        נשמר: {draft.savedAt ? new Date(draft.savedAt).toLocaleDateString('he-IL') : '—'}
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full font-medium">טיוטה</span>
+                                            </div>
+                                            <div className="flex gap-2 mt-3 pt-3 border-t border-yellow-200" onClick={e => e.stopPropagation()}>
+                                                <button
+                                                    onClick={() => handleOpenDraft(draft)}
+                                                    className="flex-1 text-xs py-2 px-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors"
+                                                >
+                                                    המשך עריכה
+                                                </button>
+                                                <button
+                                                    onClick={(e) => handleDeleteDraft(e, draft)}
+                                                    className="text-xs py-2 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium transition-colors"
+                                                >
+                                                    מחק
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="bg-white rounded-2xl shadow-lg p-6">
                             <div className="flex items-center justify-between mb-6">
@@ -2664,7 +2732,7 @@ Generate the complete plan now as JSON only.`;
         }
 
         // Create Trainee Plan Form
-        function CreateTraineePlan({ onBack, onComplete, sourceTrainee }) {
+        function CreateTraineePlan({ onBack, onComplete, sourceTrainee, draftTrainee }) {
             const [step, setStep] = useState('form'); // 'form' or 'preview'
             const [generatedPlan, setGeneratedPlan] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
@@ -2673,6 +2741,9 @@ Generate the complete plan now as JSON only.`;
             const [importPlanText, setImportPlanText] = useState('');
             const [importLoading, setImportLoading] = useState(false);
             const [importError, setImportError] = useState(null);
+            const [draftId, setDraftId] = useState(draftTrainee ? draftTrainee.id : null);
+            const [draftSaving, setDraftSaving] = useState(false);
+            const [draftSavedMsg, setDraftSavedMsg] = useState('');
             const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
 
             const [formData, setFormData] = useState(() => {
@@ -2680,6 +2751,11 @@ Generate the complete plan now as JSON only.`;
                     // Duplicate mode: copy all training fields, clear personal identity
                     const { workoutPlan, id, createdAt, traineePasswordHash, archived, updatedAt, ...trainingFields } = sourceTrainee;
                     return { ...trainingFields, name: '', email: '', phone: '' };
+                }
+                if (draftTrainee) {
+                    // Draft mode: restore all saved fields
+                    const { isDraft, id, savedAt, traineePasswordHash, archived, updatedAt, createdAt, ...draftFields } = draftTrainee;
+                    return { ...draftFields };
                 }
                 return {
                 name: '',
@@ -2897,16 +2973,37 @@ Rules:
                 setStep('preview');
             };
 
-            const handleSavePlan = async () => {
-                const trainee = {
-                    id: crypto.randomUUID(),
-                    ...formData,
-                    workoutPlan: generatedPlan,
-                    createdAt: new Date().toISOString()
-                };
-
+            const handleSaveDraft = async () => {
+                if (!formData.name && !formData.email && !formData.phone) {
+                    alert('אנא הכנס לפחות שם, אימייל או טלפון לפני שמירת טיוטה');
+                    return;
+                }
+                setDraftSaving(true);
                 try {
-                    await storage.saveTrainee(trainee);
+                    const id = draftId || crypto.randomUUID();
+                    if (draftId) {
+                        await storage.updateTrainee(id, { ...formData, isDraft: true, workoutPlan: null, savedAt: new Date().toISOString() });
+                    } else {
+                        await storage.saveTrainee({ id, ...formData, isDraft: true, workoutPlan: null, savedAt: new Date().toISOString() });
+                        setDraftId(id);
+                    }
+                    setDraftSavedMsg('הטיוטה נשמרה ✓');
+                    setTimeout(() => setDraftSavedMsg(''), 3000);
+                } catch (err) {
+                    alert('שגיאה בשמירת טיוטה: ' + (err.message || ''));
+                } finally {
+                    setDraftSaving(false);
+                }
+            };
+
+            const handleSavePlan = async () => {
+                const id = draftId || crypto.randomUUID();
+                try {
+                    if (draftId) {
+                        await storage.updateTrainee(id, { ...formData, workoutPlan: generatedPlan, isDraft: false, savedAt: null });
+                    } else {
+                        await storage.saveTrainee({ id, ...formData, workoutPlan: generatedPlan, isDraft: false });
+                    }
                     onComplete();
                 } catch (error) {
                     console.error('Error saving trainee:', error);
@@ -2966,16 +3063,38 @@ Rules:
             return (
                 <div className="min-h-screen bg-gray-50 py-8 px-4">
                     <div className="max-w-2xl mx-auto">
-                        <button
-                            onClick={onBack}
-                            className="mb-6 text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-2"
-                        >
-                            ← חזרה
-                        </button>
+                        <div className="flex justify-between items-center mb-6">
+                            <button
+                                onClick={() => {
+                                    const hasData = formData.name || formData.email || formData.phone;
+                                    if (hasData && !draftId && !sourceTrainee) {
+                                        const choice = window.confirm('יש לך נתונים לא שמורים.\nלחץ "אישור" לשמירת טיוטה לפני היציאה, או "ביטול" ליציאה ללא שמירה.');
+                                        if (choice) { handleSaveDraft().then(() => onBack()); return; }
+                                    }
+                                    onBack();
+                                }}
+                                className="text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-2"
+                            >
+                                ← חזרה
+                            </button>
+                            {!sourceTrainee && (
+                                <div className="flex items-center gap-2">
+                                    {draftSavedMsg && <span className="text-green-600 text-sm font-medium">{draftSavedMsg}</span>}
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveDraft}
+                                        disabled={draftSaving}
+                                        className="flex items-center gap-1 text-sm px-3 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-lg font-medium transition disabled:opacity-60"
+                                    >
+                                        {draftSaving ? '⏳' : '💾'} {draftId ? 'עדכן טיוטה' : 'שמור טיוטה'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         <div className="bg-white rounded-2xl shadow-xl p-8">
                             <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">
-                                {sourceTrainee ? 'שכפול תוכנית למתאמן חדש' : 'יצירת תוכנית למתאמן'}
+                                {sourceTrainee ? 'שכפול תוכנית למתאמן חדש' : draftTrainee ? 'המשך יצירת תוכנית' : 'יצירת תוכנית למתאמן'}
                             </h2>
 
                             {!sourceTrainee && claudeApiKey && (
@@ -2994,6 +3113,18 @@ Rules:
                                     >
                                         📋 ייבוא תוכנית קיימת
                                     </button>
+                                </div>
+                            )}
+
+                            {draftTrainee && !sourceTrainee && (
+                                <div className="mb-6 bg-yellow-50 border border-yellow-300 rounded-xl p-4 flex items-start gap-3">
+                                    <span className="text-2xl">📝</span>
+                                    <div>
+                                        <div className="font-semibold text-yellow-800">ממשיך עריכת טיוטה</div>
+                                        <div className="text-sm text-yellow-700 mt-1">
+                                            הפרטים שמילאת קודם שוחזרו. השלם את החסר וצור תוכנית.
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
