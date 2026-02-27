@@ -520,13 +520,19 @@ Special instructions: ${formData.customInstructions || 'None'}
 
 Generate the complete plan now as JSON only.`;
 
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
+            const proxyUrl = localStorage.getItem('anthropicProxyUrl') || '';
+            const apiEndpoint = proxyUrl
+                ? `${proxyUrl.replace(/\/$/, '')}/v1/messages`
+                : 'https://api.anthropic.com/v1/messages';
+            const extraHeaders = proxyUrl ? {} : { 'anthropic-dangerous-allow-browser': 'true' };
+
+            const response = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'x-api-key': apiKey,
                     'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-allow-browser': 'true'
+                    ...extraHeaders
                 },
                 body: JSON.stringify({
                     model: 'claude-opus-4-6',
@@ -2291,6 +2297,7 @@ Generate the complete plan now as JSON only.`;
             const [showSettings, setShowSettings] = useState(false);
             const [settingsApiKey, setSettingsApiKey] = useState(() => localStorage.getItem('claudeApiKey') || '');
             const [settingsTrainerContext, setSettingsTrainerContext] = useState(() => localStorage.getItem('trainerContext') || '');
+            const [settingsProxyUrl, setSettingsProxyUrl] = useState(() => localStorage.getItem('anthropicProxyUrl') || '');
 
             useEffect(() => {
                 loadTrainees();
@@ -2346,6 +2353,7 @@ Generate the complete plan now as JSON only.`;
             const handleSaveSettings = () => {
                 localStorage.setItem('claudeApiKey', settingsApiKey.trim());
                 localStorage.setItem('trainerContext', settingsTrainerContext.trim());
+                localStorage.setItem('anthropicProxyUrl', settingsProxyUrl.trim());
                 setShowSettings(false);
             };
 
@@ -2588,6 +2596,26 @@ Generate the complete plan now as JSON only.`;
                                     />
                                     {settingsApiKey && (
                                         <p className="text-xs text-green-600 mt-2">✓ מפתח API הוגדר</p>
+                                    )}
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        כתובת פרוקסי — פתרון CORS (אופציונלי)
+                                    </label>
+                                    <p className="text-sm text-gray-500 mb-3">
+                                        אם מופיעה שגיאת "שגיאת חיבור לשרת AI" / CORS, הגדר Cloudflare Worker לפי הקובץ <code className="bg-gray-100 px-1 rounded">cloudflare-worker.js</code> ב-GitHub והכנס כאן את כתובתו.
+                                    </p>
+                                    <input
+                                        type="text"
+                                        value={settingsProxyUrl}
+                                        onChange={e => setSettingsProxyUrl(e.target.value)}
+                                        placeholder="https://anthropic-proxy.YOUR-NAME.workers.dev"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                                        dir="ltr"
+                                    />
+                                    {settingsProxyUrl && (
+                                        <p className="text-xs text-green-600 mt-2">✓ פרוקסי הוגדר: {settingsProxyUrl}</p>
                                     )}
                                 </div>
 
