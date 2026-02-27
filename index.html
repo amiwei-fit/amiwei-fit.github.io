@@ -250,6 +250,9 @@
         // to a general search otherwise.
         const getDefaultExerciseVideoUrl = (exerciseName) => {
             const lower = exerciseName.toLowerCase();
+            // Running/cardio exercises don't need video URLs
+            const runningKeywords = ['ריצ', 'אינטרוול', 'טמפו', 'פרטלק', 'הליכ', 'מתגברות', 'ריצה', 'run', 'jog', 'walk', 'interval', 'tempo', 'fartlek', 'stride', 'sprint', 'cardio', 'אירובי'];
+            if (runningKeywords.some(k => lower.includes(k.toLowerCase()))) return null;
             const map = [
                 { keys: ['romanian deadlift', 'rdl', 'רומניאן'], url: 'https://www.youtube.com/results?search_query=romanian+deadlift+RDL+proper+form+tutorial' },
                 { keys: ['deadlift', 'דד-ליפט', 'דד ליפט'], url: 'https://www.youtube.com/watch?v=Y1IGeJEXpF4' }, // Alan Thrall - How to Deadlift
@@ -2666,6 +2669,10 @@ Generate the complete plan now as JSON only.`;
             const [generatedPlan, setGeneratedPlan] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
             const [aiError, setAiError] = useState(null);
+            const [planInputMode, setPlanInputMode] = useState('build'); // 'build' or 'import'
+            const [importPlanText, setImportPlanText] = useState('');
+            const [importLoading, setImportLoading] = useState(false);
+            const [importError, setImportError] = useState(null);
             const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
 
             const [formData, setFormData] = useState(() => {
@@ -2742,9 +2749,134 @@ Generate the complete plan now as JSON only.`;
                 }));
             };
 
+            const parseAndImportPlan = async () => {
+                if (!importPlanText.trim()) {
+                    setImportError('אנא הכנס תוכנית אימונים לייבוא');
+                    return;
+                }
+                if (!claudeApiKey) {
+                    setImportError('נדרש מפתח API של Claude להמרת התוכנית. הגדר אותו בהגדרות.');
+                    return;
+                }
+                if (!formData.name) {
+                    setImportError('אנא הכנס לפחות את שם המתאמן');
+                    return;
+                }
+                setImportLoading(true);
+                setImportError(null);
+                try {
+                    const proxyUrl = localStorage.getItem('anthropicProxyUrl') || '';
+                    const apiEndpoint = proxyUrl
+                        ? `${proxyUrl.replace(/\/$/, '')}/v1/messages`
+                        : 'https://api.anthropic.com/v1/messages';
+                    const extraHeaders = proxyUrl ? {} : { 'anthropic-dangerous-allow-browser': 'true' };
+
+                    const systemPrompt = `You are a fitness data parser. Convert the provided training plan (which may be in any format: table, free text, Hebrew/English) into a structured JSON workout plan.
+
+You must respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanations, just pure JSON):
+{
+  "duration": <number of weeks>,
+  "workoutsPerWeek": <number>,
+  "workoutDuration": <minutes per session or 60 if unknown>,
+  "weeks": [
+    {
+      "weekNumber": 1,
+      "phase": "בסיס",
+      "workouts": [
+        {
+          "day": "יום א'",
+          "type": "כוח",
+          "completed": false,
+          "feedback": null,
+          "difficulty": null,
+          "feedbackRead": false,
+          "feedbackSentToTrainer": false,
+          "exercises": [
+            {
+              "name": "exercise name in Hebrew",
+              "sets": 3,
+              "reps": "10",
+              "rest": 90,
+              "notes": "optional coaching note in Hebrew"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "createdAt": "${new Date().toISOString()}",
+  "muscleGroups": [],
+  "cardioTarget": {}
+}
+
+Rules:
+- All exercise names, phases, day names, notes MUST be in Hebrew
+- Day names: יום א', יום ב', יום ג', יום ד', יום ה', יום ו', שבת
+- Workout types in Hebrew: כוח / ריצה קלה / ריצה טמפו / אינטרוול / מנוחה פעילה / ריצה
+- For running workouts: name describes the run (e.g. "ריצה קלה 30 דקות"), sets: 1, reps: "30 דק'"
+- exercises array must never be empty
+- If a workout week appears only once in the plan but the plan says it repeats, generate all weeks
+- If unclear how many weeks, default to the number of weeks visible in the plan`;
+
+                    const userMessage = `המר את תוכנית האימונים הבאה לפורמט JSON. המתאמן: ${formData.name || 'לא צוין'}.\n\nתוכנית האימונים:\n${importPlanText}`;
+
+                    const response = await fetch(apiEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', ...extraHeaders },
+                        body: JSON.stringify({
+                            model: 'claude-opus-4-6',
+                            max_tokens: 8000,
+                            system: systemPrompt,
+                            messages: [{ role: 'user', content: userMessage }]
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        throw new Error(err.error?.message || `שגיאת API: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    const rawText = data.content?.[0]?.text || '';
+                    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                    if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מה-AI');
+
+                    const plan = JSON.parse(jsonMatch[0]);
+
+                    // Attach video URLs
+                    if (plan.weeks && Array.isArray(plan.weeks)) {
+                        plan.weeks.forEach(week => {
+                            if (week.workouts) {
+                                week.workouts.forEach(workout => {
+                                    if (workout.exercises) {
+                                        workout.exercises = workout.exercises.map(ex => ({
+                                            ...ex,
+                                            videoUrl: ex.videoUrl || getDefaultExerciseVideoUrl(ex.name)
+                                        }));
+                                    }
+                                });
+                            }
+                        });
+                    }
+
+                    setGeneratedPlan(plan);
+                    setStep('preview');
+                } catch (err) {
+                    const msg = err.message || '';
+                    const lowerMsg = msg.toLowerCase();
+                    if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
+                        setImportError('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין ושחיבור האינטרנט פעיל.');
+                    } else {
+                        setImportError(msg || 'שגיאה בניתוח התוכנית');
+                    }
+                } finally {
+                    setImportLoading(false);
+                }
+            };
+
             const handleSubmit = (e) => {
                 e.preventDefault();
-                
+
                 let workoutPlan;
                 if (sourceTrainee) {
                     // Duplicate mode: deep-copy the source plan and reset all completion/feedback state
@@ -2811,12 +2943,21 @@ Generate the complete plan now as JSON only.`;
 
             if (step === 'preview') {
                 return (
-                    <PlanPreviewEditor 
+                    <PlanPreviewEditor
                         formData={formData}
                         workoutPlan={generatedPlan}
                         onBack={() => setStep('form')}
                         onSave={handleSavePlan}
                         onRegenerate={handleRegeneratePlan}
+                        onAiRegenerate={claudeApiKey && !sourceTrainee ? async (sp) => {
+                            setAiLoading(true);
+                            try {
+                                const plan = await generatePlanWithClaude({ ...formData, customInstructions: sp || formData.customInstructions || '' }, claudeApiKey);
+                                setGeneratedPlan(plan);
+                            } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
+                            finally { setAiLoading(false); }
+                        } : null}
+                        aiRegenerateLoading={aiLoading}
                         onUpdatePlan={setGeneratedPlan}
                     />
                 );
@@ -2836,6 +2977,25 @@ Generate the complete plan now as JSON only.`;
                             <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">
                                 {sourceTrainee ? 'שכפול תוכנית למתאמן חדש' : 'יצירת תוכנית למתאמן'}
                             </h2>
+
+                            {!sourceTrainee && claudeApiKey && (
+                                <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPlanInputMode('build')}
+                                        className={`flex-1 py-2 px-4 rounded-lg font-semibold transition text-sm ${planInputMode === 'build' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        🏋️ בניית תוכנית חדשה
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPlanInputMode('import')}
+                                        className={`flex-1 py-2 px-4 rounded-lg font-semibold transition text-sm ${planInputMode === 'import' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        📋 ייבוא תוכנית קיימת
+                                    </button>
+                                </div>
+                            )}
 
                             {sourceTrainee && (
                                 <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
@@ -2893,7 +3053,7 @@ Generate the complete plan now as JSON only.`;
                                             name="age"
                                             value={formData.age}
                                             onChange={handleChange}
-                                            required
+                                            required={planInputMode === 'build'}
                                             min="1"
                                             max="100"
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -2906,7 +3066,7 @@ Generate the complete plan now as JSON only.`;
                                             name="gender"
                                             value={formData.gender}
                                             onChange={handleChange}
-                                            required
+                                            required={planInputMode === 'build'}
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                         >
                                             <option value="">בחר...</option>
@@ -2922,7 +3082,7 @@ Generate the complete plan now as JSON only.`;
                                             name="height"
                                             value={formData.height}
                                             onChange={handleChange}
-                                            required
+                                            required={planInputMode === 'build'}
                                             min="120"
                                             max="250"
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -2936,7 +3096,7 @@ Generate the complete plan now as JSON only.`;
                                             name="weight"
                                             value={formData.weight}
                                             onChange={handleChange}
-                                            required
+                                            required={planInputMode === 'build'}
                                             min="30"
                                             max="300"
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -2944,6 +3104,8 @@ Generate the complete plan now as JSON only.`;
                                     </div>
                                 </div>
 
+                                {planInputMode === 'build' && (
+                                <React.Fragment>
                                 <div>
                                     <label className="block text-gray-700 font-semibold mb-2">רמת פעילות נוכחית</label>
                                     <select
@@ -3444,6 +3606,48 @@ Generate the complete plan now as JSON only.`;
                                         צור תוכנית ועבור לתצוגה מקדימה
                                     </button>
                                 </div>
+                                </React.Fragment>
+                                )} {/* end planInputMode === 'build' */}
+
+                                {planInputMode === 'import' && (
+                                    <div className="space-y-4">
+                                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                                            <h3 className="font-bold text-purple-900 mb-1">📋 ייבוא תוכנית אימונים קיימת</h3>
+                                            <p className="text-sm text-purple-700">הדבק תוכנית אימונים בכל פורמט — טבלה, טקסט חופשי, עברית או אנגלית. ה-AI יתרגם אותה למבנה המסודר של המערכת.</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-2">תוכנית האימונים</label>
+                                            <textarea
+                                                value={importPlanText}
+                                                onChange={(e) => setImportPlanText(e.target.value)}
+                                                rows={14}
+                                                placeholder={`הדבק כאן את תוכנית האימונים...\n\nלדוגמה:\nשבוע 1:\nיום א - כוח עליון: לחיצת חזה 4x10, מושכייה 3x12, כפיפת מרפקים 3x15\nיום ג - רגליים: סקוואט 4x8, לחיצת רגליים 3x12, לאנג׳ 3x10\nיום ה - ריצה קלה 30 דקות\n...\nאו הדבק טבלה מאקסל`}
+                                                className="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none font-mono text-sm"
+                                                dir="auto"
+                                            />
+                                        </div>
+                                        {importError && (
+                                            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                                                ⚠️ {importError}
+                                            </div>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={parseAndImportPlan}
+                                            disabled={importLoading}
+                                            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                                        >
+                                            {importLoading ? (
+                                                <>
+                                                    <span className="animate-spin">⏳</span>
+                                                    מנתח ומתרגם תוכנית... (עד דקה)
+                                                </>
+                                            ) : (
+                                                <>✨ נתח ותרגם תוכנית עם AI</>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
                             </form>
                         </div>
                     </div>
@@ -3455,6 +3659,8 @@ Generate the complete plan now as JSON only.`;
         function EditTraineePlan({ trainee, onBack, onComplete }) {
             const [currentPlan, setCurrentPlan] = useState(trainee.workoutPlan);
             const [saving, setSaving] = useState(false);
+            const [aiLoading, setAiLoading] = useState(false);
+            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
 
             const handleSavePlan = async () => {
                 setSaving(true);
@@ -3475,6 +3681,25 @@ Generate the complete plan now as JSON only.`;
                 setCurrentPlan(newPlan);
             };
 
+            const handleAiRegenerate = async (systemPrompt) => {
+                setAiLoading(true);
+                try {
+                    const updatedFormData = { ...trainee, customInstructions: systemPrompt || trainee.customInstructions || '' };
+                    const newPlan = await generatePlanWithClaude(updatedFormData, claudeApiKey);
+                    setCurrentPlan(newPlan);
+                } catch (err) {
+                    const msg = err.message || '';
+                    const lowerMsg = msg.toLowerCase();
+                    if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
+                        alert('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין ושחיבור האינטרנט פעיל.');
+                    } else {
+                        alert('שגיאה ביצירת תוכנית עם AI: ' + (msg || 'שגיאה לא ידועה'));
+                    }
+                } finally {
+                    setAiLoading(false);
+                }
+            };
+
             return (
                 <PlanPreviewEditor
                     formData={trainee}
@@ -3482,6 +3707,8 @@ Generate the complete plan now as JSON only.`;
                     onBack={onBack}
                     onSave={handleSavePlan}
                     onRegenerate={handleRegeneratePlan}
+                    onAiRegenerate={claudeApiKey ? handleAiRegenerate : null}
+                    aiRegenerateLoading={aiLoading}
                     onUpdatePlan={setCurrentPlan}
                     isEditMode={true}
                     saving={saving}
@@ -3490,13 +3717,15 @@ Generate the complete plan now as JSON only.`;
         }
 
         // Plan Preview and Editor
-        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onUpdatePlan, isEditMode, saving }) {
+        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onAiRegenerate, aiRegenerateLoading, onUpdatePlan, isEditMode, saving }) {
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [editingExercise, setEditingExercise] = useState(null);
             const [showSuggestions, setShowSuggestions] = useState(false);
             const [aiSuggestion, setAiSuggestion] = useState('');
+            const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [addMenuOpen, setAddMenuOpen] = useState(null);
+            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
 
             const currentWeek = workoutPlan.weeks[selectedWeek];
 
@@ -3549,16 +3778,49 @@ Generate the complete plan now as JSON only.`;
                 onUpdatePlan(updatedPlan);
             };
 
-            const handleGetAISuggestions = () => {
-                // Simulate AI suggestions based on the plan
-                const suggestions = [
-                    `💡 עבור ${formData.name} ברמה ${formData.activityLevel}, מומלץ להוסיף יותר זמן התאוששות בין הסטים בשבועות הראשונים.`,
-                    `💡 בהתחשב במטרות "${formData.goals.join(', ')}", כדאי להוסיף תרגילי core נוספים לשיפור יציבות.`,
-                    `💡 לשיפור האיזון, מומלץ להוסיף תרגילי משקל גוף חד-צדדיים כמו לאנג'ים בולגריים.`,
-                    `💡 עבור התקדמות מיטבית, שקול להוסיף שבוע דלואד (deload) אחרי 3 שבועות של אימונים אינטנסיביים.`
-                ];
-                setAiSuggestion(suggestions[Math.floor(Math.random() * suggestions.length)]);
-                setShowSuggestions(true);
+            const handleGetAISuggestions = async () => {
+                if (claudeApiKey) {
+                    setAiSuggestionsLoading(true);
+                    setShowSuggestions(true);
+                    setAiSuggestion('');
+                    try {
+                        const proxyUrl = localStorage.getItem('anthropicProxyUrl') || '';
+                        const apiEndpoint = proxyUrl
+                            ? `${proxyUrl.replace(/\/$/, '')}/v1/messages`
+                            : 'https://api.anthropic.com/v1/messages';
+                        const extraHeaders = proxyUrl ? {} : { 'anthropic-dangerous-allow-browser': 'true' };
+                        const planSummary = JSON.stringify({ duration: workoutPlan.duration, workoutsPerWeek: workoutPlan.workoutsPerWeek, firstWeek: workoutPlan.weeks?.[0] }, null, 2);
+                        const response = await fetch(apiEndpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', ...extraHeaders },
+                            body: JSON.stringify({
+                                model: 'claude-opus-4-6',
+                                max_tokens: 600,
+                                messages: [{ role: 'user', content: `אתה מאמן כושר מקצועי. בדוק את תוכנית האימונים הבאה ותן 2-3 הצעות שיפור ספציפיות ומועילות בעברית. המתאמן: שם ${formData.name}, גיל ${formData.age}, רמה ${formData.activityLevel}, מטרות: ${(formData.goals||[]).join(', ')}.\n\nסיכום התוכנית:\n${planSummary}\n\nתן הצעות קצרות וממוקדות בעברית בלבד.` }]
+                            })
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            setAiSuggestion(data.content?.[0]?.text || 'לא התקבלו הצעות');
+                        } else {
+                            setAiSuggestion('שגיאה בקבלת הצעות מה-AI');
+                        }
+                    } catch (err) {
+                        setAiSuggestion('שגיאת חיבור לשרת AI');
+                    } finally {
+                        setAiSuggestionsLoading(false);
+                    }
+                } else {
+                    // Fallback without API key
+                    const suggestions = [
+                        `💡 עבור ${formData.name} ברמה ${formData.activityLevel}, מומלץ להוסיף יותר זמן התאוששות בין הסטים בשבועות הראשונים.`,
+                        `💡 בהתחשב במטרות "${(formData.goals||[]).join(', ')}", כדאי להוסיף תרגילי core נוספים לשיפור יציבות.`,
+                        `💡 לשיפור האיזון, מומלץ להוסיף תרגילי משקל גוף חד-צדדיים כמו לאנג'ים בולגריים.`,
+                        `💡 עבור התקדמות מיטבית, שקול להוסיף שבוע דלואד (deload) אחרי 3 שבועות של אימונים אינטנסיביים.`
+                    ];
+                    setAiSuggestion(suggestions[Math.floor(Math.random() * suggestions.length)]);
+                    setShowSuggestions(true);
+                }
             };
 
             return (
@@ -3571,23 +3833,35 @@ Generate the complete plan now as JSON only.`;
                             >
                                 ← {isEditMode ? 'חזרה לפרטי מתאמן' : 'חזרה לעריכת פרטי מתאמן'}
                             </button>
-                            <div className="flex gap-3">
+                            <div className="flex gap-3 flex-wrap justify-end">
                                 <button
                                     onClick={handleGetAISuggestions}
-                                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+                                    disabled={aiSuggestionsLoading}
+                                    className="bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
                                 >
-                                    <span>🤖</span>
-                                    קבל הצעות שיפור
+                                    <span>{aiSuggestionsLoading ? '⏳' : '🤖'}</span>
+                                    {aiSuggestionsLoading ? 'מנתח...' : 'הצעות שיפור AI'}
                                 </button>
+                                {onAiRegenerate && (
+                                    <button
+                                        onClick={() => onAiRegenerate(systemPrompt)}
+                                        disabled={aiRegenerateLoading}
+                                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+                                    >
+                                        <span>{aiRegenerateLoading ? '⏳' : '✨'}</span>
+                                        {aiRegenerateLoading ? 'יוצר עם AI...' : 'שנה תוכנית עם AI'}
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => onRegenerate(systemPrompt)}
-                                    className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-semibold transition"
+                                    disabled={aiRegenerateLoading}
+                                    className="bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-semibold transition"
                                 >
-                                    🔄 צור תוכנית מחדש
+                                    🔄 צור מחדש (אלגוריתם)
                                 </button>
                                 <button
                                     onClick={onSave}
-                                    disabled={saving}
+                                    disabled={saving || aiRegenerateLoading}
                                     className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition shadow-lg disabled:opacity-60"
                                 >
                                     {saving ? '⏳ שומר...' : isEditMode ? '✓ שמור שינויים' : '✓ אשר ושמור תוכנית'}
@@ -3607,9 +3881,16 @@ Generate the complete plan now as JSON only.`;
                                         ✕
                                     </button>
                                 </div>
-                                <p className="text-blue-800">{aiSuggestion}</p>
+                                {aiSuggestionsLoading ? (
+                                    <div className="flex items-center gap-2 text-blue-700">
+                                        <span className="animate-spin">⏳</span>
+                                        מנתח את התוכנית עם AI...
+                                    </div>
+                                ) : (
+                                    <p className="text-blue-800 whitespace-pre-wrap">{aiSuggestion}</p>
+                                )}
                                 <p className="text-sm text-blue-600 mt-3">
-                                    טיפ: תוכל לערוך כל תרגיל בלחיצה על כפתור "ערוך"
+                                    טיפ: תוכל לערוך כל תרגיל בלחיצה על כפתור "ערוך", או להשתמש בהוראות למטה לשינוי התוכנית
                                 </p>
                             </div>
                         )}
