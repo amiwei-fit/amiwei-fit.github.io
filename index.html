@@ -584,6 +584,90 @@ Generate the complete plan now as JSON only.`;
             return plan;
         };
 
+        // Edit existing plan with Claude — applies ONLY specific requested changes, keeps everything else intact
+        const editPlanWithClaude = async (currentPlan, traineeData, changeRequest, apiKey) => {
+            const trainerContext = localStorage.getItem('trainerContext') || '';
+            const trainerContextSection = trainerContext
+                ? `\n\nTRAINER'S PERSONAL METHODOLOGY (apply these principles when making changes):\n${trainerContext}`
+                : '';
+
+            const EDIT_SYSTEM_PROMPT = `You are an expert personal trainer. You receive an existing workout plan as JSON and a specific modification request. Your job is to apply ONLY the requested changes and return the complete modified plan.
+
+Critical rules:
+- Modify ONLY what is explicitly requested — nothing more
+- Keep ALL other weeks, workouts, exercises, sets, reps, rest periods, notes, phases, and structure IDENTICAL to the input
+- Do NOT reorganize, rename, or restructure anything that was not mentioned in the request
+- All text must remain in Hebrew
+- Return the complete plan (all weeks, all workouts) as valid JSON with exactly the same structure as the input — no markdown, no explanation outside the JSON${trainerContextSection}`;
+
+            const proxyUrl = localStorage.getItem('anthropicProxyUrl') || '';
+            const apiEndpoint = proxyUrl
+                ? `${proxyUrl.replace(/\/$/, '')}/v1/messages`
+                : 'https://api.anthropic.com/v1/messages';
+            const extraHeaders = proxyUrl ? {} : { 'anthropic-dangerous-allow-browser': 'true' };
+
+            const originalInstructions = traineeData.customInstructions || '';
+            const traineeSummary = [
+                `Trainee: ${traineeData.name}`,
+                traineeData.age ? `Age: ${traineeData.age}` : '',
+                traineeData.activityLevel ? `Level: ${traineeData.activityLevel}` : '',
+                (traineeData.goals||[]).length ? `Goals: ${traineeData.goals.join(', ')}` : '',
+                originalInstructions ? `Original plan instructions: ${originalInstructions}` : ''
+            ].filter(Boolean).join('\n');
+
+            const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(currentPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
+
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    ...extraHeaders
+                },
+                body: JSON.stringify({
+                    model: 'claude-opus-4-6',
+                    max_tokens: 24000,
+                    system: EDIT_SYSTEM_PROMPT,
+                    messages: [{ role: 'user', content: userMessage }]
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `שגיאת API: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (data.stop_reason === 'max_tokens') {
+                throw new Error('התוכנית גדולה מדי לעיבוד. נסה לפרק את השינוי לחלקים קטנים יותר.');
+            }
+
+            const rawText = data.content?.[0]?.text || '';
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מה-AI');
+
+            const plan = JSON.parse(jsonMatch[0]);
+
+            if (plan.weeks && Array.isArray(plan.weeks)) {
+                plan.weeks.forEach(week => {
+                    if (week.workouts) {
+                        week.workouts.forEach(workout => {
+                            if (workout.exercises) {
+                                workout.exercises = workout.exercises.map(ex => ({
+                                    ...ex,
+                                    videoUrl: ex.videoUrl || getDefaultExerciseVideoUrl(ex.name)
+                                }));
+                            }
+                        });
+                    }
+                });
+            }
+
+            return plan;
+        };
+
         // Workout generation algorithm
         const generateWorkoutPlan = (userData) => {
             const { weight, height, age, gender, activityLevel, workoutDuration, goals, muscleGroups, cardioTarget, weeklyWorkouts } = userData;
@@ -3818,11 +3902,14 @@ Rules:
                 setCurrentPlan(newPlan);
             };
 
-            const handleAiRegenerate = async (systemPrompt) => {
+            const handleAiRegenerate = async (changeRequest) => {
+                if (!changeRequest || !changeRequest.trim()) {
+                    alert('אנא תאר את השינוי הרצוי לפני שתלחץ על הכפתור');
+                    return;
+                }
                 setAiLoading(true);
                 try {
-                    const updatedFormData = { ...trainee, customInstructions: systemPrompt || trainee.customInstructions || '' };
-                    const newPlan = await generatePlanWithClaude(updatedFormData, claudeApiKey);
+                    const newPlan = await editPlanWithClaude(currentPlan, trainee, changeRequest, claudeApiKey);
                     setCurrentPlan(newPlan);
                 } catch (err) {
                     const msg = err.message || '';
@@ -3830,7 +3917,7 @@ Rules:
                     if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
                         alert('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין ושחיבור האינטרנט פעיל.');
                     } else {
-                        alert('שגיאה ביצירת תוכנית עם AI: ' + (msg || 'שגיאה לא ידועה'));
+                        alert('שגיאה בעריכת תוכנית עם AI: ' + (msg || 'שגיאה לא ידועה'));
                     }
                 } finally {
                     setAiLoading(false);
@@ -3986,7 +4073,9 @@ Rules:
                                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
                                     >
                                         <span>{aiRegenerateLoading ? '⏳' : '✨'}</span>
-                                        {aiRegenerateLoading ? 'יוצר עם AI...' : 'שנה תוכנית עם AI'}
+                                        {aiRegenerateLoading
+                                            ? (isEditMode ? 'מעדכן...' : 'יוצר עם AI...')
+                                            : (isEditMode ? 'החל שינוי עם AI' : 'שנה תוכנית עם AI')}
                                     </button>
                                 )}
                                 <button
@@ -4055,14 +4144,22 @@ Rules:
                             </div>
 
                             {/* System Prompt */}
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
-                                <h3 className="font-bold text-yellow-900 mb-1">💬 הוראות לשינוי התוכנית</h3>
-                                <p className="text-sm text-yellow-700 mb-3">הכנס הוראות ולחץ "צור תוכנית מחדש" כדי לקבל תוכנית מותאמת</p>
+                            <div className={`border rounded-xl p-4 mb-6 ${isEditMode ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                                <h3 className={`font-bold mb-1 ${isEditMode ? 'text-blue-900' : 'text-yellow-900'}`}>
+                                    {isEditMode ? '✏️ תאר את השינוי הרצוי' : '💬 הוראות לשינוי התוכנית'}
+                                </h3>
+                                <p className={`text-sm mb-3 ${isEditMode ? 'text-blue-700' : 'text-yellow-700'}`}>
+                                    {isEditMode
+                                        ? 'כתוב רק את השינוי הספציפי שאתה רוצה — שאר התוכנית תישאר כפי שהיא'
+                                        : 'הכנס הוראות ולחץ "צור תוכנית מחדש" כדי לקבל תוכנית מותאמת'}
+                                </p>
                                 <textarea
                                     value={systemPrompt}
                                     onChange={(e) => setSystemPrompt(e.target.value)}
-                                    placeholder="לדוגמה: הוסף יותר אימוני ריצה, הפחת עצימות, התמקד בחיזוק הגב העליון..."
-                                    className="w-full px-4 py-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent resize-none text-gray-800 bg-white"
+                                    placeholder={isEditMode
+                                        ? 'לדוגמה: "החלף סקוואט ל-Leg Press בכל האימונים", "הוסף סט אחד לכל תרגיל בשבועות 5-8", "שנה את אימון יום ב\' לאימון ריצה טמפו"...'
+                                        : 'לדוגמה: הוסף יותר אימוני ריצה, הפחת עצימות, התמקד בחיזוק הגב העליון...'}
+                                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent resize-none text-gray-800 bg-white ${isEditMode ? 'border-blue-300 focus:ring-blue-400' : 'border-yellow-300 focus:ring-yellow-400'}`}
                                     rows={3}
                                 />
                             </div>
