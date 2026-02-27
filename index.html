@@ -514,6 +514,7 @@ Running level: ${formData.runningLevel || 'Not a runner'}
 ${formData.raceGoal ? 'Race goal: ' + formData.raceGoal : ''}
 ${formData.current5kTime ? '5k time: ' + formData.current5kTime : ''}
 ${formData.weeklyMileage ? 'Weekly mileage: ' + formData.weeklyMileage + 'km' : ''}
+${formData.maxContinuousDistance ? 'Maximum continuous running distance (without stopping): ' + formData.maxContinuousDistance : ''}
 ${formData.injuryHistory ? 'Injury history: ' + formData.injuryHistory : ''}
 Special instructions: ${formData.customInstructions || 'None'}
 
@@ -592,6 +593,7 @@ Generate the complete plan now as JSON only.`;
                 currentHalfTime:  userData.currentHalfTime   || cardioTarget.currentHalfTime   || '',
                 currentMarathonTime: userData.currentMarathonTime || cardioTarget.currentMarathonTime || '',
                 injuryHistory: userData.injuryHistory || '',
+                maxContinuousDistance: userData.maxContinuousDistance || '',
                 customContinuousRunMinutes,
             };
 
@@ -1823,7 +1825,10 @@ Generate the complete plan now as JSON only.`;
         // 6. פרטלק > אינטרוולים - creative fartlek preferred over rigid track intervals
         // 7. בסיס אירובי (Aerobic base) - foundation before quality, Lydiard method
         const generateRunningWorkout = (cardioTarget, week, workoutDuration, goals, totalWeeks = 12, phase = { name: 'בסיס', key: 'base' }, runningSessionIdx = 0) => {
-            const { runningLevel, raceGoal, current5kTime, current10kTime, customContinuousRunMinutes } = cardioTarget;
+            const { runningLevel, raceGoal, current5kTime, current10kTime, customContinuousRunMinutes, maxContinuousDistance } = cardioTarget;
+            // Convert maxContinuousDistance (km) to minutes at ~7 min/km pace for beginners
+            const distanceMinutes = maxContinuousDistance ? parseFloat(maxContinuousDistance) * 7 : null;
+            const effectiveContinuousMinutes = customContinuousRunMinutes || distanceMinutes;
             const duration = parseInt(workoutDuration);
 
             // Resolve personal pace zones from 5K (or 10K) time
@@ -1842,8 +1847,8 @@ Generate the complete plan now as JSON only.`;
             if (runningLevel === 'beginner') {
                 // If custom instructions specify current running ability (e.g. "יכול לרוץ 4 דקות רצוף"),
                 // start the walk-to-run program at the matching phase instead of week 1.
-                const programStartWeek = customContinuousRunMinutes
-                    ? getWalkToRunStartWeek(customContinuousRunMinutes)
+                const programStartWeek = effectiveContinuousMinutes
+                    ? getWalkToRunStartWeek(effectiveContinuousMinutes)
                     : 1;
                 return generateWalkToRunWorkout(week + (programStartWeek - 1), duration);
             }
@@ -2657,6 +2662,7 @@ Generate the complete plan now as JSON only.`;
                 // Running-specific fields
                 runningLevel: '', // beginner, intermediate, advanced
                 weeklyMileage: '', // current km per week
+                maxContinuousDistance: '', // max km runner can run without stopping
                 raceGoal: '', // marathon, half-marathon, 10k, 5k, general fitness
                 currentPace: '', // e.g., "5:30 per km"
                 current5kTime: '',
@@ -2763,7 +2769,12 @@ Generate the complete plan now as JSON only.`;
                     setGeneratedPlan(plan);
                     setStep('preview');
                 } catch (err) {
-                    setAiError(err.message || 'שגיאה ביצירת תוכנית עם AI');
+                    const msg = err.message || '';
+                    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network')) {
+                        setAiError('שגיאת רשת: לא ניתן להתחבר לשרת AI. בדוק את חיבור האינטרנט ווודא שמפתח ה-API תקין בהגדרות.');
+                    } else {
+                        setAiError(msg || 'שגיאה ביצירת תוכנית עם AI');
+                    }
                 } finally {
                     setAiLoading(false);
                 }
@@ -3163,6 +3174,21 @@ Generate the complete plan now as JSON only.`;
                                                     placeholder='למשל: "15 ק״מ" או "0 - מתחיל"'
                                                     className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                                 />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                    מרחק מקסימלי שהמתאמן יכול לרוץ ברציפות (אופציונלי)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="maxContinuousDistance"
+                                                    value={formData.maxContinuousDistance}
+                                                    onChange={handleChange}
+                                                    placeholder='למשל: "3.5 ק״מ", "500 מטר", "לא יכול לרוץ רצוף"'
+                                                    className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <p className="text-xs text-gray-500 mt-1">מידע זה יעזור למערכת לקבוע מאיפה להתחיל את תוכנית הריצה</p>
                                             </div>
 
                                             <div>
