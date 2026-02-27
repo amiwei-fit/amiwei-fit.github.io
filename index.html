@@ -2770,8 +2770,9 @@ Generate the complete plan now as JSON only.`;
                     setStep('preview');
                 } catch (err) {
                     const msg = err.message || '';
-                    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network')) {
-                        setAiError('שגיאת רשת: לא ניתן להתחבר לשרת AI. בדוק את חיבור האינטרנט ווודא שמפתח ה-API תקין בהגדרות.');
+                    const lowerMsg = msg.toLowerCase();
+                    if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
+                        setAiError('שגיאת חיבור לשרת AI: הדפדפן לא הצליח להגיע לשרת Anthropic. ודא שמפתח ה-API תקין בהגדרות, שחיבור האינטרנט פעיל, ושהדפדפן לא חוסם קריאות חיצוניות (CORS).');
                     } else {
                         setAiError(msg || 'שגיאה ביצירת תוכנית עם AI');
                     }
