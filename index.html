@@ -547,7 +547,7 @@ Generate the complete plan now as JSON only.`;
                     ...extraHeaders
                 },
                 body: JSON.stringify({
-                    model: 'claude-opus-4-6',
+                    model: 'claude-sonnet-4-6',
                     max_tokens: 24000,
                     system: SYSTEM_PROMPT,
                     messages: [{ role: 'user', content: userMessage }]
