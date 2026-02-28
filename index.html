@@ -3003,7 +3003,7 @@ Rules:
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', ...extraHeaders },
                         body: JSON.stringify({
-                            model: 'claude-opus-4-6',
+                            model: 'claude-sonnet-4-6',
                             max_tokens: 8000,
                             system: systemPrompt,
                             messages: [{ role: 'user', content: userMessage }]
@@ -4100,7 +4100,7 @@ Rules:
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', ...extraHeaders },
                             body: JSON.stringify({
-                                model: 'claude-opus-4-6',
+                                model: 'claude-haiku-4-5-20251001',
                                 max_tokens: 600,
                                 messages: [{ role: 'user', content: `אתה מאמן כושר מקצועי. בדוק את תוכנית האימונים הבאה ותן 2-3 הצעות שיפור ספציפיות ומועילות בעברית. המתאמן: שם ${formData.name}, גיל ${formData.age}, רמה ${formData.activityLevel}, מטרות: ${(formData.goals||[]).join(', ')}.\n\nסיכום התוכנית:\n${planSummary}\n\nתן הצעות קצרות וממוקדות בעברית בלבד.` }]
                             })
