@@ -623,7 +623,25 @@ Critical rules:
                 originalInstructions ? `Original plan instructions: ${originalInstructions}` : ''
             ].filter(Boolean).join('\n');
 
-            const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(currentPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
+            // Strip user-progress fields and auto-generated fields to reduce JSON size (~35% smaller)
+            const workoutProgress = {};
+            const strippedPlan = JSON.parse(JSON.stringify(currentPlan));
+            strippedPlan.weeks?.forEach(week => {
+                week.workouts?.forEach(workout => {
+                    const key = `${week.weekNumber}|${workout.day}`;
+                    workoutProgress[key] = {
+                        completed: workout.completed,
+                        feedback: workout.feedback,
+                        difficulty: workout.difficulty
+                    };
+                    delete workout.completed;
+                    delete workout.feedback;
+                    delete workout.difficulty;
+                    workout.exercises?.forEach(ex => { delete ex.videoUrl; });
+                });
+            });
+
+            const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(strippedPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
 
             const response = await fetch(apiEndpoint, {
                 method: 'POST',
@@ -635,7 +653,8 @@ Critical rules:
                 },
                 body: JSON.stringify({
                     model: 'claude-sonnet-4-6',
-                    max_tokens: 16000,
+                    max_tokens: 32000,
+                    stream: true,
                     system: EDIT_SYSTEM_PROMPT,
                     messages: [{ role: 'user', content: userMessage }]
                 })
@@ -649,13 +668,37 @@ Critical rules:
                 throw new Error(err.error?.message || `שגיאת API: ${response.status}`);
             }
 
-            const data = await response.json();
+            // Stream the response to keep connection alive and avoid proxy timeouts
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let rawText = '';
+            let stopReason = null;
+            let sseBuffer = '';
 
-            if (data.stop_reason === 'max_tokens') {
-                throw new Error('התוכנית גדולה מדי לעיבוד. נסה לפרק את השינוי לחלקים קטנים יותר.');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                sseBuffer += decoder.decode(value, { stream: true });
+                const lines = sseBuffer.split('\n');
+                sseBuffer = lines.pop();
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const jsonStr = line.slice(6).trim();
+                    if (!jsonStr) continue;
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
+                            rawText += parsed.delta.text;
+                        } else if (parsed.type === 'message_delta' && parsed.delta?.stop_reason) {
+                            stopReason = parsed.delta.stop_reason;
+                        }
+                    } catch {}
+                }
             }
 
-            const rawText = data.content?.[0]?.text || '';
+            if (stopReason === 'max_tokens') {
+                throw new Error('התוכנית גדולה מדי לעיבוד. נסה לפרק את השינוי לחלקים קטנים יותר.');
+            }
             const jsonMatch = rawText.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מה-AI');
 
@@ -665,6 +708,14 @@ Critical rules:
                 plan.weeks.forEach(week => {
                     if (week.workouts) {
                         week.workouts.forEach(workout => {
+                            // Restore user progress that was stripped before sending
+                            const key = `${week.weekNumber}|${workout.day}`;
+                            if (workoutProgress[key]) {
+                                const p = workoutProgress[key];
+                                if (p.completed !== undefined) workout.completed = p.completed;
+                                if (p.feedback !== undefined) workout.feedback = p.feedback;
+                                if (p.difficulty !== undefined) workout.difficulty = p.difficulty;
+                            }
                             if (workout.exercises) {
                                 workout.exercises = workout.exercises.map(ex => ({
                                     ...ex,
