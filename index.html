@@ -3128,14 +3128,43 @@ Critical rules:
                         }
                     );
                     const signUpData = await signUpRes.json();
+                    let uid;
                     if (!signUpRes.ok) {
                         const errorMsg = signUpData.error?.message || '';
                         if (errorMsg === 'EMAIL_EXISTS') {
-                            throw Object.assign(new Error('Email already in use'), { code: 'auth/email-already-in-use' });
+                            // Try to sign in — if same password works and no Firestore doc exists,
+                            // it's an orphaned account from a previous failed creation attempt
+                            const signInRes = await fetch(
+                                `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+                                {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        email: newUsername.trim() + TRAINER_EMAIL_SUFFIX,
+                                        password: newPassword,
+                                        returnSecureToken: true
+                                    })
+                                }
+                            );
+                            const signInData = await signInRes.json();
+                            if (!signInRes.ok) {
+                                // Wrong password or other error — genuinely taken
+                                throw Object.assign(new Error('Email already in use'), { code: 'auth/email-already-in-use' });
+                            }
+                            const orphanUid = signInData.localId;
+                            const existingDoc = await db.collection('trainers').doc('trainer_' + orphanUid).get();
+                            if (existingDoc.exists) {
+                                // Firestore doc also exists — genuinely taken
+                                throw Object.assign(new Error('Email already in use'), { code: 'auth/email-already-in-use' });
+                            }
+                            // Orphaned account: Auth exists but no Firestore doc — recover it
+                            uid = orphanUid;
+                        } else {
+                            throw new Error(errorMsg || 'שגיאה ביצירת חשבון');
                         }
-                        throw new Error(errorMsg || 'שגיאה ביצירת חשבון');
+                    } else {
+                        uid = signUpData.localId;
                     }
-                    const uid = signUpData.localId;
                     // Save trainer data in Firestore — admin auth is completely unaffected
                     const trainerId = 'trainer_' + uid;
                     await trainerStorage.saveTrainer({
