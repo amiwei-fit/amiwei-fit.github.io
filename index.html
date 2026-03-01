@@ -957,7 +957,7 @@ Generate the complete plan now as JSON only.`;
         const generatePlanWithGemini = async (formData, apiKey, options = {}) => {
             const systemPrompt = getTrainingSystemPrompt();
             const userMessage = buildTrainingUserMessage(formData, options);
-            const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+            const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
             let lastError = null;
 
             for (const model of models) {
@@ -1188,7 +1188,7 @@ Critical rules:
 
             const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(strippedPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
 
-            const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+            const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
             let rawText = '';
             let lastEditError = null;
             let gotResponse = false;
@@ -6531,8 +6531,34 @@ ${traineeLink}
             const [description, setDescription] = useState('');
             const [selectedTraineeId, setSelectedTraineeId] = useState('');
             const [saving, setSaving] = useState(false);
+            const [aiLoading, setAiLoading] = useState(false);
+            const [aiError, setAiError] = useState(null);
+            const [aiText, setAiText] = useState('');
+            const [aiGeneratedPlan, setAiGeneratedPlan] = useState(null);
+            const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
+            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
+            const hasAiProvider = !!(claudeApiKey || geminiApiKey);
 
             const availableTrainees = trainees.filter(t => !t.archived && !t.isDraft && t.workoutPlan);
+
+            const handleGroupAiGenerate = async (provider) => {
+                if (!aiText.trim()) { setAiError('אנא הכנס תיאור של התוכנית הקבוצתית'); return; }
+                setAiError(null);
+                setAiLoading(true);
+                try {
+                    const fakeFormData = { name: programName.trim() || 'תוכנית קבוצתית' };
+                    const plan = provider === 'gemini'
+                        ? await generatePlanWithGemini(fakeFormData, geminiApiKey, { naturalDescription: aiText })
+                        : await generatePlanWithClaude(fakeFormData, claudeApiKey, { naturalDescription: aiText });
+                    setAiGeneratedPlan(plan);
+                    setSelectedTraineeId('');
+                } catch (err) {
+                    const msg = err.message || '';
+                    setAiError(msg || 'שגיאה ביצירת תוכנית עם AI');
+                } finally {
+                    setAiLoading(false);
+                }
+            };
 
             const handleCreate = async () => {
                 if (!programName.trim()) {
@@ -6542,7 +6568,9 @@ ${traineeLink}
                 setSaving(true);
                 try {
                     let workoutPlan = null;
-                    if (selectedTraineeId) {
+                    if (aiGeneratedPlan) {
+                        workoutPlan = aiGeneratedPlan;
+                    } else if (selectedTraineeId) {
                         const tpl = availableTrainees.find(t => t.id === selectedTraineeId);
                         if (tpl && tpl.workoutPlan) {
                             workoutPlan = JSON.parse(JSON.stringify(tpl.workoutPlan));
@@ -6626,10 +6654,64 @@ ${traineeLink}
                                 </div>
                             </div>
                         </div>
+                        {hasAiProvider && (
+                            <div className="bg-white rounded-2xl shadow-lg p-6">
+                                <h2 className="text-xl font-bold text-gray-800 mb-1">✨ יצירת תוכנית עם AI</h2>
+                                <p className="text-sm text-gray-500 mb-4">תאר את התוכנית הקבוצתית בחופשיות ו-AI יבנה אותה עבורך</p>
+                                <textarea
+                                    value={aiText}
+                                    onChange={(e) => { setAiText(e.target.value); setAiError(null); }}
+                                    rows={5}
+                                    placeholder={'לדוגמה: תוכנית כושר לקבוצת מתחילים, 8 שבועות, 3 אימונים בשבוע, 45 דקות כל אימון. התמקדות בכוח כללי ושריפת שומן. ציוד: מכון כושר מלא.'}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none mb-4"
+                                    dir="auto"
+                                />
+                                {aiError && (
+                                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm mb-4">
+                                        ⚠️ {aiError}
+                                    </div>
+                                )}
+                                {aiGeneratedPlan && (
+                                    <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-4 text-sm mb-4">
+                                        ✅ תוכנית נוצרה בהצלחה עם AI ({aiGeneratedPlan.weeks?.length || 0} שבועות) — לחץ "צור תוכנית קבוצתית" למטה
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 gap-3">
+                                    {geminiApiKey && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleGroupAiGenerate('gemini')}
+                                            disabled={aiLoading || saving}
+                                            className="w-full bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                                        >
+                                            {aiLoading ? (
+                                                <><span className="animate-spin">⏳</span>יוצר תוכנית עם AI... (עד דקה)</>
+                                            ) : (
+                                                <>✨ צור תוכנית עם Gemini <span className="text-green-100 text-xs font-normal">(חינם)</span></>
+                                            )}
+                                        </button>
+                                    )}
+                                    {claudeApiKey && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleGroupAiGenerate('claude')}
+                                            disabled={aiLoading || saving}
+                                            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                                        >
+                                            {aiLoading ? (
+                                                <><span className="animate-spin">⏳</span>יוצר תוכנית עם AI... (עד דקה)</>
+                                            ) : (
+                                                <>🤖 צור תוכנית עם Claude <span className="text-blue-200 text-xs font-normal">(בתשלום)</span></>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div className="flex gap-4">
                             <button
                                 onClick={handleCreate}
-                                disabled={saving || !programName.trim()}
+                                disabled={saving || aiLoading || !programName.trim()}
                                 className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-4 rounded-xl transition text-lg"
                             >
                                 {saving ? 'יוצר...' : '✨ צור תוכנית קבוצתית'}
