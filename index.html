@@ -3021,19 +3021,20 @@ Critical rules:
                             newPassword
                         );
                         uid = cred.user.uid;
-                        await secondaryAuth.signOut();
+                        // Save to Firestore BEFORE deleting the secondary app to avoid
+                        // auth interference that causes "Missing or insufficient permissions"
+                        const trainerId = 'trainer_' + uid;
+                        await trainerStorage.saveTrainer({
+                            id: trainerId,
+                            uid,
+                            name: newName.trim(),
+                            username: newUsername.trim(),
+                            allowedAI: newAllowedAI
+                        });
                     } finally {
+                        // delete() cleans up the secondary app without interfering with primary auth
                         await secondaryApp.delete();
                     }
-                    // Save trainer data in Firestore
-                    const trainerId = 'trainer_' + uid;
-                    await trainerStorage.saveTrainer({
-                        id: trainerId,
-                        uid,
-                        name: newName.trim(),
-                        username: newUsername.trim(),
-                        allowedAI: newAllowedAI
-                    });
                     setCreatedCredentials({ name: newName.trim(), username: newUsername.trim(), password: newPassword, allowedAI: newAllowedAI });
                     setNewName(''); setNewUsername(''); setNewPassword(''); setNewAllowedAI('both');
                     setShowAddForm(false);
