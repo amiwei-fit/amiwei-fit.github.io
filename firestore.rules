@@ -16,5 +16,29 @@ service cloud.firestore {
         .affectedKeys()
         .hasOnly(['workoutPlan', 'traineePasswordHash', 'updatedAt']);
     }
+
+    match /groupPrograms/{programId} {
+      // Authenticated trainer can do anything
+      allow read, write: if request.auth != null;
+
+      // Anyone can read a single group program document (to view it and register)
+      allow get: if true;
+    }
+
+    match /groupMembers/{memberId} {
+      // Authenticated trainer can read and write all member documents
+      allow read, write: if request.auth != null;
+
+      // Anyone can read a single member document (for member to view their plan)
+      allow get: if true;
+
+      // Anyone can create a new member document (self-registration)
+      allow create: if true;
+
+      // Members (unauthenticated) can only update workoutPlan and updatedAt
+      allow update: if request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(['workoutPlan', 'updatedAt']);
+    }
   }
 }
