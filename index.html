@@ -1020,7 +1020,7 @@ Generate the complete plan now as JSON only.`;
         // Return a user-friendly Hebrew message for Gemini quota/rate errors
         const getGeminiQuotaErrorMsg = (errMsg) => {
             const lower = errMsg.toLowerCase();
-            if (lower.includes('per_minute') || lower.includes('per minute') || lower.includes('rate_limit') || lower.includes('retry')) {
+            if (lower.includes('per_minute') || lower.includes('per minute')) {
                 return 'הגעת למגבלת הבקשות לדקה של Gemini. המערכת ניסתה דגם חלופי. המתן כדקה ונסה שוב.';
             }
             if (lower.includes('per_day') || lower.includes('per day') || lower.includes('daily')) {
