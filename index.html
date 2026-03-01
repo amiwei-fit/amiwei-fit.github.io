@@ -4803,6 +4803,26 @@ Rules:
                 onUpdatePlan(updatedPlan);
             };
 
+            const handleRemoveWorkout = (weekIndex, workoutIndex) => {
+                if (!window.confirm('האם למחוק יום אימון זה לגמרי?')) return;
+                const updatedPlan = { ...workoutPlan };
+                updatedPlan.weeks[weekIndex].workouts.splice(workoutIndex, 1);
+                onUpdatePlan(updatedPlan);
+            };
+
+            const handleDuplicateWorkout = (weekIndex, workoutIndex) => {
+                const updatedPlan = { ...workoutPlan };
+                const original = updatedPlan.weeks[weekIndex].workouts[workoutIndex];
+                const copy = JSON.parse(JSON.stringify(original));
+                copy.completed = false;
+                copy.difficulty = null;
+                copy.feedback = null;
+                copy.feedbackSentToTrainer = false;
+                copy.feedbackRead = false;
+                updatedPlan.weeks[weekIndex].workouts.splice(workoutIndex + 1, 0, copy);
+                onUpdatePlan(updatedPlan);
+            };
+
             const handleMoveExercise = (weekIndex, workoutIndex, exerciseIndex, direction) => {
                 const updatedPlan = { ...workoutPlan };
                 const exercises = updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises;
@@ -4986,6 +5006,20 @@ Rules:
                                 />
                             </div>
 
+                            {/* Plan Settings */}
+                            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    id="disableCompletionTracking"
+                                    checked={!!workoutPlan.disableCompletionTracking}
+                                    onChange={(e) => onUpdatePlan({ ...workoutPlan, disableCompletionTracking: e.target.checked })}
+                                    className="w-5 h-5 accent-purple-600 cursor-pointer"
+                                />
+                                <label htmlFor="disableCompletionTracking" className="text-gray-700 font-semibold cursor-pointer select-none">
+                                    השבת סימון ביצוע אימון — המתאמן לא יראה כפתורי "סיימתי" ופידבק
+                                </label>
+                            </div>
+
                             {/* Week Selector */}
                             <div className="mb-6">
                                 <h3 className="font-bold text-gray-800 mb-3">בחר שבוע לעריכה</h3>
@@ -5016,6 +5050,21 @@ Rules:
                                                 <span className={`text-3xl ${workout.type === 'כוח' ? '🏋️' : '🏃'}`}></span>
                                                 יום {workout.day} - אימון {workout.type}
                                             </h3>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleDuplicateWorkout(selectedWeek, workoutIndex)}
+                                                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold transition"
+                                                    title="שכפל יום אימון זה"
+                                                >
+                                                    שכפל יום
+                                                </button>
+                                                <button
+                                                    onClick={() => handleRemoveWorkout(selectedWeek, workoutIndex)}
+                                                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-semibold transition"
+                                                    title="מחק יום אימון זה"
+                                                >
+                                                    מחק יום
+                                                </button>
                                             <div className="relative">
                                                 <button
                                                     onClick={() => setAddMenuOpen(
@@ -5043,6 +5092,7 @@ Rules:
                                                         </button>
                                                     </div>
                                                 )}
+                                            </div>
                                             </div>
                                         </div>
 
@@ -6362,13 +6412,14 @@ ${traineeLink}
                                                 <h3 className="text-xl font-bold text-gray-800">
                                                     יום {workout.day} - אימון {workout.type}
                                                 </h3>
-                                                {workout.completed && (
+                                                {workout.completed && !trainee.workoutPlan?.disableCompletionTracking && (
                                                     <span className="inline-block bg-green-100 text-green-800 text-sm px-3 py-1 rounded-full mt-1">
                                                         ✓ הושלם
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
+                                        {!trainee.workoutPlan?.disableCompletionTracking && (
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={() => handleWorkoutComplete(selectedWeek, index)}
@@ -6390,6 +6441,7 @@ ${traineeLink}
                                                 פידבק
                                             </button>
                                         </div>
+                                        )}
                                     </div>
 
                                     {/* Exercises */}
