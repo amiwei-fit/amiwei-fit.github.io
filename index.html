@@ -675,12 +675,22 @@ Rules:
         };
 
         const buildTrainingUserMessage = (formData, options = {}) => {
+            // Build approved exercises section (library + similar trainees)
+            const allApproved = [
+                ...(options.approvedExercises || []),
+                ...(options.similarExercises || [])
+            ];
+            const uniqueApproved = [...new Set(allApproved)];
+            const exerciseConstraint = uniqueApproved.length > 0
+                ? `\n\nCRITICAL — APPROVED EXERCISE LIST: You MUST use exercise names ONLY from this list. Do NOT invent or use any exercise name not on this list. Pick the most suitable exercises for the trainee from the approved list below:\n${uniqueApproved.join('\n')}\n`
+                : '';
+
             return options.naturalDescription
                 ? `Create a personalized workout plan for a trainee named "${formData.name || 'Trainee'}".
 
 The trainer's full description of this trainee and what they need:
 ${options.naturalDescription}
-
+${exerciseConstraint}
 Extract all relevant details from the description above (age, goals, fitness level, schedule, equipment, injuries, etc.) and create a complete individualized plan.
 Generate the complete plan now as JSON only.`
                 : `Create a personalized workout plan for this trainee:
@@ -704,7 +714,7 @@ ${formData.weeklyMileage ? 'Weekly mileage: ' + formData.weeklyMileage + 'km' : 
 ${formData.maxContinuousDistance ? 'Maximum continuous running distance (without stopping): ' + formData.maxContinuousDistance : ''}
 ${formData.injuryHistory ? 'Injury history: ' + formData.injuryHistory : ''}
 Special instructions: ${formData.customInstructions || 'None'}
-
+${exerciseConstraint}
 Generate the complete plan now as JSON only.`;
         };
 
@@ -1970,30 +1980,9 @@ Critical rules:
             return exercises.slice(0, maxExercises);
         };
 
-        // Professional muscle building workout based on equipment and muscle groups
-        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '', customInstructions = '', weekNum = 1) => {
-            // Beginners (by level OR experience): always use FBW with progressive sets
-            const isBeginnerLevel = strengthExperience === 'beginner' || level === 'מתחיל';
-            if (isBeginnerLevel) {
-                return generateFBWBeginnerWorkout(availableEquipment, sessionNum, workoutDuration);
-            }
-
-            const hasGym = availableEquipment.includes('חדר כושר מלא');
-            const hasDumbbells = availableEquipment.includes('משקולות חופשיות (דמבלים/קטלבלים)') || hasGym;
-            const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
-            const hasPullupBar = availableEquipment.includes('מתח, מקבילים');
-            const bodyweightOnly = availableEquipment.includes('משקל גוף בלבד') && !hasDumbbells && !hasGym;
-
-            // 4-week rotation: every 4 weeks, 2 key exercises swap
-            // Even blocks (weeks 1-4, 9-12...): squat is primary leg compound
-            // Odd blocks (weeks 5-8, 13-16...): deadlift is primary leg compound
-            const fourWeekBlock = Math.floor((weekNum - 1) / 4);
-            const primaryLegIsDeadlift = fourWeekBlock % 2 === 1;
-
-            let exercises = [];
-            
-            // Define exercises by muscle group and equipment
-            const exerciseLibrary = {
+        // Approved exercise library — organized by muscle group and equipment
+        // Used both for algorithmic plan generation and to guide AI models
+        const exerciseLibrary = {
                 'חזה': {
                     gym: [
                         { name: 'בשכיבה לחיצת חזה עם מוט (Flat Bench Press)', sets: 4, reps: '8-10', rest: 120, notes: 'אחיזה מעבר לרוחב כתפיים. הורדה לקו הפטמות' },
@@ -2163,8 +2152,78 @@ Critical rules:
                         { name: 'לאנג\'ים עם Kettlebell', sets: 3, reps: '12 לכל רגל', rest: 60, notes: 'אפשר עם overhead press / rotation' }
                     ]
                 }
-            };
-            
+        };
+
+        // Returns all exercise names from the library that match the trainee's available equipment
+        const getAllExerciseNames = (availableEquipment = []) => {
+            const hasGym = availableEquipment.includes('חדר כושר מלא');
+            const hasDumbbells = availableEquipment.includes('משקולות חופשיות (דמבלים/קטלבלים)') || hasGym;
+            const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
+            const names = new Set();
+            Object.values(exerciseLibrary).forEach(group => {
+                if (hasGym && group.gym) group.gym.forEach(e => names.add(e.name));
+                if (hasDumbbells && group.dumbbells) group.dumbbells.forEach(e => names.add(e.name));
+                if (hasTRX && group.trx) group.trx.forEach(e => names.add(e.name));
+                if (group.bodyweight) group.bodyweight.forEach(e => names.add(e.name));
+                if (group.all) group.all.forEach(e => names.add(e.name));
+                if (hasGym && group.specialized) group.specialized.forEach(e => names.add(e.name));
+                if (group.fullbody) group.fullbody.forEach(e => names.add(e.name));
+            });
+            return [...names];
+        };
+
+        // Finds trainees with similar profile and returns exercise names from their plans
+        const findSimilarTraineesExercises = (formData, trainees) => {
+            if (!trainees || !trainees.length) return [];
+            const formGoals = formData.goals || [];
+            const formEquipment = formData.availableEquipment || [];
+            const formLevel = formData.activityLevel || '';
+            const similar = trainees.filter(t => {
+                if (!t.workoutPlan || t.isDraft || t.archived) return false;
+                const tGoals = t.goals || [];
+                const tEquipment = t.availableEquipment || [];
+                const sharedGoals = formGoals.some(g => tGoals.includes(g));
+                const sharedEquipment = formEquipment.some(eq => tEquipment.includes(eq));
+                const sameLevel = t.activityLevel === formLevel;
+                return (sharedGoals && sharedEquipment) || (sameLevel && sharedEquipment);
+            });
+            const names = new Set();
+            similar.forEach(t => {
+                t.workoutPlan?.weeks?.forEach(week => {
+                    week.workouts?.forEach(workout => {
+                        workout.exercises?.forEach(ex => {
+                            if (ex.name && !ex.name.includes('חימום') && !ex.name.includes('מתיחות')) {
+                                names.add(ex.name);
+                            }
+                        });
+                    });
+                });
+            });
+            return [...names];
+        };
+
+        // Professional muscle building workout based on equipment and muscle groups
+        const generateMuscleBuildingWorkout = (muscleGroups, level, workoutDuration, availableEquipment, sessionNum = 1, strengthExperience = '', customInstructions = '', weekNum = 1) => {
+            // Beginners (by level OR experience): always use FBW with progressive sets
+            const isBeginnerLevel = strengthExperience === 'beginner' || level === 'מתחיל';
+            if (isBeginnerLevel) {
+                return generateFBWBeginnerWorkout(availableEquipment, sessionNum, workoutDuration);
+            }
+
+            const hasGym = availableEquipment.includes('חדר כושר מלא');
+            const hasDumbbells = availableEquipment.includes('משקולות חופשיות (דמבלים/קטלבלים)') || hasGym;
+            const hasTRX = availableEquipment.includes('TRX / רצועות התנגדות');
+            const hasPullupBar = availableEquipment.includes('מתח, מקבילים');
+            const bodyweightOnly = availableEquipment.includes('משקל גוף בלבד') && !hasDumbbells && !hasGym;
+
+            // 4-week rotation: every 4 weeks, 2 key exercises swap
+            // Even blocks (weeks 1-4, 9-12...): squat is primary leg compound
+            // Odd blocks (weeks 5-8, 13-16...): deadlift is primary leg compound
+            const fourWeekBlock = Math.floor((weekNum - 1) / 4);
+            const primaryLegIsDeadlift = fourWeekBlock % 2 === 1;
+
+            let exercises = [];
+
             // Intermediate/advanced sets: 4 for large muscles, 3 for small (per training principles)
             const setsLarge = level === 'מתקדם' || strengthExperience === 'advanced' ? 4 : 4;
             const setsSmall = level === 'מתקדם' || strengthExperience === 'advanced' ? 4 : 3;
@@ -3701,6 +3760,7 @@ Critical rules:
                         }}
                         sourceTrainee={sourceTrainee}
                         draftTrainee={draftTrainee}
+                        trainees={trainees}
                     />
                 );
             }
@@ -4060,7 +4120,7 @@ Critical rules:
         }
 
         // Create Trainee Plan Form
-        function CreateTraineePlan({ onBack, onComplete, sourceTrainee, draftTrainee }) {
+        function CreateTraineePlan({ onBack, onComplete, sourceTrainee, draftTrainee, trainees = [] }) {
             const { allowedAI } = React.useContext(TrainerContext);
             const [step, setStep] = useState('form'); // 'form' or 'preview'
             const [generatedPlan, setGeneratedPlan] = useState(null);
@@ -4294,11 +4354,13 @@ Rules:
                 setFreeTextError(null);
                 setAiLoading(true);
                 try {
+                    const approvedExercises = getAllExerciseNames(formData.availableEquipment || []);
+                    const similarExercises = findSimilarTraineesExercises(formData, trainees);
                     const plan = provider === 'gemini'
-                        ? await generatePlanWithGemini(formData, geminiApiKey, { naturalDescription: freeText })
+                        ? await generatePlanWithGemini(formData, geminiApiKey, { naturalDescription: freeText, approvedExercises, similarExercises })
                         : provider === 'groq'
-                        ? await generatePlanWithGroq(formData, groqApiKey, { naturalDescription: freeText })
-                        : await generatePlanWithClaude(formData, claudeApiKey, { naturalDescription: freeText });
+                        ? await generatePlanWithGroq(formData, groqApiKey, { naturalDescription: freeText, approvedExercises, similarExercises })
+                        : await generatePlanWithClaude(formData, claudeApiKey, { naturalDescription: freeText, approvedExercises, similarExercises });
                     setGeneratedPlan(plan);
                     setStep('preview');
                 } catch (err) {
@@ -4388,11 +4450,13 @@ Rules:
                 setAiError(null);
                 setAiLoading(true);
                 try {
+                    const approvedExercises = getAllExerciseNames(formData.availableEquipment || []);
+                    const similarExercises = findSimilarTraineesExercises(formData, trainees);
                     const plan = provider === 'gemini'
-                        ? await generatePlanWithGemini(formData, geminiApiKey)
+                        ? await generatePlanWithGemini(formData, geminiApiKey, { approvedExercises, similarExercises })
                         : provider === 'groq'
-                        ? await generatePlanWithGroq(formData, groqApiKey)
-                        : await generatePlanWithClaude(formData, claudeApiKey);
+                        ? await generatePlanWithGroq(formData, groqApiKey, { approvedExercises, similarExercises })
+                        : await generatePlanWithClaude(formData, claudeApiKey, { approvedExercises, similarExercises });
                     setGeneratedPlan(plan);
                     setStep('preview');
                 } catch (err) {
@@ -4422,7 +4486,9 @@ Rules:
                             setAiLoading(true);
                             try {
                                 const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
-                                const plan = await generatePlanWithClaude(updatedForm, claudeApiKey);
+                                const approvedExercises = getAllExerciseNames(formData.availableEquipment || []);
+                                const similarExercises = findSimilarTraineesExercises(formData, trainees);
+                                const plan = await generatePlanWithClaude(updatedForm, claudeApiKey, { approvedExercises, similarExercises });
                                 setGeneratedPlan(plan);
                             } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
                             finally { setAiLoading(false); }
@@ -4431,7 +4497,9 @@ Rules:
                             setAiLoading(true);
                             try {
                                 const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
-                                const plan = await generatePlanWithGemini(updatedForm, geminiApiKey);
+                                const approvedExercises = getAllExerciseNames(formData.availableEquipment || []);
+                                const similarExercises = findSimilarTraineesExercises(formData, trainees);
+                                const plan = await generatePlanWithGemini(updatedForm, geminiApiKey, { approvedExercises, similarExercises });
                                 setGeneratedPlan(plan);
                             } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
                             finally { setAiLoading(false); }
@@ -4440,7 +4508,9 @@ Rules:
                             setAiLoading(true);
                             try {
                                 const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
-                                const plan = await generatePlanWithGroq(updatedForm, groqApiKey);
+                                const approvedExercises = getAllExerciseNames(formData.availableEquipment || []);
+                                const similarExercises = findSimilarTraineesExercises(formData, trainees);
+                                const plan = await generatePlanWithGroq(updatedForm, groqApiKey, { approvedExercises, similarExercises });
                                 setGeneratedPlan(plan);
                             } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
                             finally { setAiLoading(false); }
@@ -7316,9 +7386,10 @@ ${traineeLink}
                 setAiLoading(true);
                 try {
                     const fakeFormData = { name: programName.trim() || 'תוכנית קבוצתית' };
+                    const approvedExercises = getAllExerciseNames([]);
                     const plan = provider === 'gemini'
-                        ? await generatePlanWithGemini(fakeFormData, geminiApiKey, { naturalDescription: aiText })
-                        : await generatePlanWithClaude(fakeFormData, claudeApiKey, { naturalDescription: aiText });
+                        ? await generatePlanWithGemini(fakeFormData, geminiApiKey, { naturalDescription: aiText, approvedExercises })
+                        : await generatePlanWithClaude(fakeFormData, claudeApiKey, { naturalDescription: aiText, approvedExercises });
                     setAiGeneratedPlan(plan);
                     setSelectedTraineeId('');
                 } catch (err) {
