@@ -3086,7 +3086,7 @@ Critical rules:
             const [newName, setNewName] = useState('');
             const [newUsername, setNewUsername] = useState('');
             const [newPassword, setNewPassword] = useState('');
-            const [newAllowedAI, setNewAllowedAI] = useState('both');
+            const [newAllowedAI, setNewAllowedAI] = useState('groq_gemini');
             const [saving, setSaving] = useState(false);
             const [formError, setFormError] = useState('');
             const [createdCredentials, setCreatedCredentials] = useState(null);
@@ -3220,7 +3220,7 @@ Critical rules:
                                     <div><span className="text-gray-500">שם:</span> <strong>{createdCredentials.name}</strong></div>
                                     <div><span className="text-gray-500">שם משתמש:</span> <strong dir="ltr">{createdCredentials.username}</strong></div>
                                     <div><span className="text-gray-500">סיסמה:</span> <strong dir="ltr">{createdCredentials.password}</strong></div>
-                                    <div><span className="text-gray-500">הרשאות AI:</span> <strong>{createdCredentials.allowedAI === 'both' ? 'Gemini + Claude' : 'Gemini בלבד'}</strong></div>
+                                    <div><span className="text-gray-500">הרשאות AI:</span> <strong>{createdCredentials.allowedAI === 'all' || createdCredentials.allowedAI === 'both' ? 'Groq + Gemini + Claude' : createdCredentials.allowedAI === 'groq_gemini' ? 'Groq + Gemini' : createdCredentials.allowedAI === 'groq' ? 'Groq בלבד' : createdCredentials.allowedAI === 'gemini' ? 'Gemini בלבד' : 'Groq + Gemini'}</strong></div>
                                 </div>
                                 <button
                                     onClick={() => setCreatedCredentials(null)}
@@ -3257,10 +3257,16 @@ Critical rules:
                                             <div className="font-bold text-gray-800 text-lg">{trainer.name}</div>
                                             <div className="text-sm text-gray-500 mt-0.5" dir="ltr">{trainer.username}</div>
                                             <div className="mt-2">
-                                                {trainer.allowedAI === 'gemini' ? (
-                                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">Gemini בלבד</span>
+                                                {(trainer.allowedAI === 'all' || trainer.allowedAI === 'both') ? (
+                                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-medium">⚡✨🤖 Groq + Gemini + Claude</span>
+                                                ) : trainer.allowedAI === 'groq_gemini' ? (
+                                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">⚡✨ Groq + Gemini</span>
+                                                ) : trainer.allowedAI === 'groq' ? (
+                                                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">⚡ Groq בלבד</span>
+                                                ) : trainer.allowedAI === 'gemini' ? (
+                                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">✨ Gemini בלבד</span>
                                                 ) : (
-                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">Gemini + Claude</span>
+                                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">⚡✨ Groq + Gemini</span>
                                                 )}
                                             </div>
                                         </div>
@@ -3319,32 +3325,46 @@ Critical rules:
                                         <div>
                                             <label className="block text-gray-700 font-semibold mb-2">הרשאות AI</label>
                                             <div className="space-y-2">
-                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'gemini' ? '#16a34a' : '#e5e7eb'}}>
+                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'groq' ? '#d97706' : '#e5e7eb'}}>
                                                     <input
                                                         type="radio"
                                                         name="allowedAI"
-                                                        value="gemini"
-                                                        checked={newAllowedAI === 'gemini'}
-                                                        onChange={() => setNewAllowedAI('gemini')}
+                                                        value="groq"
+                                                        checked={newAllowedAI === 'groq'}
+                                                        onChange={() => setNewAllowedAI('groq')}
+                                                        className="accent-amber-600"
+                                                    />
+                                                    <div>
+                                                        <div className="font-semibold text-amber-700">⚡ Groq בלבד</div>
+                                                        <div className="text-xs text-gray-500">המאמן יוכל ליצור תוכניות עם Groq (חינמי, מהיר)</div>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'groq_gemini' ? '#16a34a' : '#e5e7eb'}}>
+                                                    <input
+                                                        type="radio"
+                                                        name="allowedAI"
+                                                        value="groq_gemini"
+                                                        checked={newAllowedAI === 'groq_gemini'}
+                                                        onChange={() => setNewAllowedAI('groq_gemini')}
                                                         className="accent-green-600"
                                                     />
                                                     <div>
-                                                        <div className="font-semibold text-green-700">✨ Gemini בלבד</div>
-                                                        <div className="text-xs text-gray-500">המאמן יוכל ליצור תוכניות עם Gemini (חינמי)</div>
+                                                        <div className="font-semibold text-green-700">⚡✨ Groq + Gemini</div>
+                                                        <div className="text-xs text-gray-500">המאמן יוכל להשתמש ב-Groq וב-Gemini (שניהם חינמיים)</div>
                                                     </div>
                                                 </label>
-                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'both' ? '#4f46e5' : '#e5e7eb'}}>
+                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'all' ? '#4f46e5' : '#e5e7eb'}}>
                                                     <input
                                                         type="radio"
                                                         name="allowedAI"
-                                                        value="both"
-                                                        checked={newAllowedAI === 'both'}
-                                                        onChange={() => setNewAllowedAI('both')}
+                                                        value="all"
+                                                        checked={newAllowedAI === 'all'}
+                                                        onChange={() => setNewAllowedAI('all')}
                                                         className="accent-indigo-600"
                                                     />
                                                     <div>
-                                                        <div className="font-semibold text-indigo-700">🤖 Gemini + Claude</div>
-                                                        <div className="text-xs text-gray-500">המאמן יוכל להשתמש בשני ה-AI</div>
+                                                        <div className="font-semibold text-indigo-700">🤖 Groq + Gemini + Claude</div>
+                                                        <div className="text-xs text-gray-500">גישה מלאה לכל מודלי ה-AI</div>
                                                     </div>
                                                 </label>
                                             </div>
@@ -3723,8 +3743,14 @@ Critical rules:
                             <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2 text-blue-800 text-sm">
                                 <span>👤</span>
                                 <span>מחובר כמאמן: <strong>{trainerUser.name || trainerUser.username}</strong></span>
+                                {trainerUser.allowedAI === 'groq' && (
+                                    <span className="mr-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">⚡ Groq בלבד</span>
+                                )}
+                                {trainerUser.allowedAI === 'groq_gemini' && (
+                                    <span className="mr-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">⚡✨ Groq + Gemini</span>
+                                )}
                                 {trainerUser.allowedAI === 'gemini' && (
-                                    <span className="mr-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Gemini בלבד</span>
+                                    <span className="mr-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✨ Gemini בלבד</span>
                                 )}
                             </div>
                         )}
@@ -4049,9 +4075,9 @@ Critical rules:
             const [draftSavedMsg, setDraftSavedMsg] = useState('');
             const [freeText, setFreeText] = useState('');
             const [freeTextError, setFreeTextError] = useState(null);
-            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
-            const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
-            const groqApiKey = localStorage.getItem('groqApiKey') || '';
+            const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
+            const geminiApiKey = (allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both' || allowedAI === 'gemini') ? (localStorage.getItem('geminiApiKey') || '') : '';
+            const groqApiKey = (allowedAI === 'groq' || allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('groqApiKey') || '') : '';
             const hasAiProvider = !!(claudeApiKey || geminiApiKey || groqApiKey);
 
             const [formData, setFormData] = useState(() => {
@@ -5270,9 +5296,9 @@ Rules:
             const [currentPlan, setCurrentPlan] = useState(trainee.workoutPlan);
             const [saving, setSaving] = useState(false);
             const [aiLoading, setAiLoading] = useState(false);
-            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
-            const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
-            const groqApiKey = localStorage.getItem('groqApiKey') || '';
+            const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
+            const geminiApiKey = (allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both' || allowedAI === 'gemini') ? (localStorage.getItem('geminiApiKey') || '') : '';
+            const groqApiKey = (allowedAI === 'groq' || allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('groqApiKey') || '') : '';
 
             const handleSavePlan = async () => {
                 setSaving(true);
@@ -5383,9 +5409,49 @@ Rules:
             const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [addMenuOpen, setAddMenuOpen] = useState(null);
-            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
+            const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
 
             const currentWeek = workoutPlan.weeks[selectedWeek];
+
+            const handleDownloadPDF = () => {
+                const traineeGoals = (formData.goals || []).join(', ') || '';
+                const traineeEquipment = (formData.availableEquipment || []).join(', ') || '';
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) { alert('אנא אפשר חלונות קופצים להורדת PDF'); return; }
+                const rows = workoutPlan.weeks.map(week => {
+                    const workoutCells = week.workouts.map(wo => {
+                        const exLines = (wo.exercises || [])
+                            .filter(ex => !ex.name.includes('חימום') && !ex.name.includes('מתיחות'))
+                            .map(ex => `<tr><td style="padding:0 2px;font-size:6.5pt;color:#333">${ex.name}</td><td style="padding:0 2px;font-size:6.5pt;text-align:center;white-space:nowrap">${ex.sets ? ex.sets+'×' : ''}${ex.reps || ex.duration || ''}</td></tr>`).join('');
+                        return `<td style="vertical-align:top;padding:2px 3px;border:1px solid #ccc;width:${Math.floor(85/week.workouts.length)}%">
+                            <div style="font-size:7pt;font-weight:bold;color:#4f46e5;margin-bottom:1px">${wo.day} — ${wo.type}</div>
+                            <table style="width:100%;border-collapse:collapse">${exLines}</table>
+                        </td>`;
+                    }).join('');
+                    return `<tr>
+                        <td style="padding:2px 4px;border:1px solid #ccc;font-size:7pt;font-weight:bold;white-space:nowrap;background:#f5f5ff;width:6%">שבוע ${week.weekNumber}<br><span style="font-weight:normal;color:#666;font-size:6pt">${week.phase||''}</span></td>
+                        ${workoutCells}
+                    </tr>`;
+                }).join('');
+                const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>תוכנית אימונים — ${formData.name||''}</title>
+                <style>
+                  @page { size: A4; margin: 8mm; }
+                  * { box-sizing: border-box; font-family: Arial, sans-serif; }
+                  body { margin: 0; padding: 0; font-size: 7pt; }
+                  h1 { font-size: 11pt; margin: 0 0 2px; }
+                  .meta { font-size: 7pt; color: #555; margin-bottom: 4px; }
+                  table.plan { width: 100%; border-collapse: collapse; }
+                  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                </style></head><body>
+                <h1>תוכנית אימונים — ${formData.name||''}</h1>
+                <div class="meta">${formData.age ? 'גיל: '+formData.age+' | ' : ''}${formData.activityLevel ? 'רמה: '+formData.activityLevel+' | ' : ''}${traineeGoals ? 'מטרות: '+traineeGoals+' | ' : ''}${traineeEquipment ? 'ציוד: '+traineeEquipment : ''}</div>
+                <div class="meta">משך התוכנית: ${workoutPlan.duration||''} שבועות | ${workoutPlan.workoutsPerWeek||''} אימונים/שבוע | ${workoutPlan.workoutDuration||''} דקות/אימון</div>
+                <table class="plan"><tbody>${rows}</tbody></table>
+                <script>window.onload=function(){window.print();}<\/script>
+                </body></html>`;
+                printWindow.document.write(html);
+                printWindow.document.close();
+            };
 
             const handleExerciseEdit = (weekIndex, workoutIndex, exerciseIndex, field, value) => {
                 const updatedPlan = { ...workoutPlan };
@@ -5763,14 +5829,24 @@ Rules:
                             >
                                 ← חזרה
                             </button>
-                            <button
-                                onClick={onSave}
-                                disabled={saving}
-                                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition shadow-lg flex items-center gap-2 disabled:opacity-60"
-                            >
-                                <span>✓</span>
-                                {saving ? 'שומר...' : isEditMode ? 'שמור שינויים' : 'אשר ושמור - מוכן לשליחה למתאמן'}
-                            </button>
+                            <div className="flex gap-3 items-center">
+                                <button
+                                    onClick={handleDownloadPDF}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg font-semibold transition shadow flex items-center gap-2"
+                                    title="הורד תוכנית כ-PDF (A4)"
+                                >
+                                    <span>📄</span>
+                                    הורד PDF
+                                </button>
+                                <button
+                                    onClick={onSave}
+                                    disabled={saving}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition shadow-lg flex items-center gap-2 disabled:opacity-60"
+                                >
+                                    <span>✓</span>
+                                    {saving ? 'שומר...' : isEditMode ? 'שמור שינויים' : 'אשר ושמור - מוכן לשליחה למתאמן'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -7227,9 +7303,10 @@ ${traineeLink}
             const [aiError, setAiError] = useState(null);
             const [aiText, setAiText] = useState('');
             const [aiGeneratedPlan, setAiGeneratedPlan] = useState(null);
-            const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
-            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
-            const hasAiProvider = !!(claudeApiKey || geminiApiKey);
+            const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
+            const geminiApiKey = (allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both' || allowedAI === 'gemini') ? (localStorage.getItem('geminiApiKey') || '') : '';
+            const groqApiKey = (allowedAI === 'groq' || allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('groqApiKey') || '') : '';
+            const hasAiProvider = !!(claudeApiKey || geminiApiKey || groqApiKey);
 
             const availableTrainees = trainees.filter(t => !t.archived && !t.isDraft && t.workoutPlan);
 
