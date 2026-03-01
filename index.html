@@ -947,37 +947,57 @@ Generate the complete plan now as JSON only.`;
             return processPlanExercises(JSON.parse(jsonMatch[0]));
         };
 
-        // Gemini AI plan generation (free tier — up to 1,500 req/day)
+        // Extract retry delay (in ms) from Gemini quota error message
+        const parseGeminiRetryDelay = (msg) => {
+            const match = msg.match(/retry in ([\d.]+)s/i);
+            return match ? Math.ceil(parseFloat(match[1])) * 1000 : 20000;
+        };
+
+        // Gemini AI plan generation with retry and model fallback
         const generatePlanWithGemini = async (formData, apiKey, options = {}) => {
             const systemPrompt = getTrainingSystemPrompt();
             const userMessage = buildTrainingUserMessage(formData, options);
+            const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+            let lastError = null;
 
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        system_instruction: { parts: [{ text: systemPrompt }] },
-                        contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-                        generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
-                    })
+            for (const model of models) {
+                for (let attempt = 0; attempt <= 1; attempt++) {
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                system_instruction: { parts: [{ text: systemPrompt }] },
+                                contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+                                generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+                            })
+                        }
+                    );
+
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        const errorMsg = err.error?.message || '';
+                        const isQuotaError = response.status === 429 || errorMsg.toLowerCase().includes('quota');
+                        if (isQuotaError && attempt === 0) {
+                            const delay = parseGeminiRetryDelay(errorMsg);
+                            await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
+                            continue;
+                        }
+                        lastError = new Error(errorMsg || `שגיאת Gemini API: ${response.status}`);
+                        break;
+                    }
+
+                    const data = await response.json();
+                    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    if (!rawText) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
+                    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                    if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
+                    return processPlanExercises(JSON.parse(jsonMatch[0]));
                 }
-            );
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.error?.message || `שגיאת Gemini API: ${response.status}`);
             }
 
-            const data = await response.json();
-            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            if (!rawText) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
-
-            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
-
-            return processPlanExercises(JSON.parse(jsonMatch[0]));
+            throw lastError || new Error('שגיאת Gemini API');
         };
 
         // Edit existing plan with Claude — applies ONLY specific requested changes, keeps everything else intact
@@ -1168,26 +1188,48 @@ Critical rules:
 
             const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(strippedPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
 
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        system_instruction: { parts: [{ text: EDIT_SYSTEM_PROMPT }] },
-                        contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-                        generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
-                    })
-                }
-            );
+            const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+            let rawText = '';
+            let lastEditError = null;
+            let gotResponse = false;
 
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.error?.message || `שגיאת Gemini API: ${response.status}`);
+            for (const model of models) {
+                for (let attempt = 0; attempt <= 1; attempt++) {
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                system_instruction: { parts: [{ text: EDIT_SYSTEM_PROMPT }] },
+                                contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+                                generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+                            })
+                        }
+                    );
+
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        const errorMsg = err.error?.message || '';
+                        const isQuotaError = response.status === 429 || errorMsg.toLowerCase().includes('quota');
+                        if (isQuotaError && attempt === 0) {
+                            const delay = parseGeminiRetryDelay(errorMsg);
+                            await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
+                            continue;
+                        }
+                        lastEditError = new Error(errorMsg || `שגיאת Gemini API: ${response.status}`);
+                        break;
+                    }
+
+                    const data = await response.json();
+                    rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    gotResponse = true;
+                    break;
+                }
+                if (gotResponse) break;
             }
 
-            const data = await response.json();
-            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (!gotResponse) throw lastEditError || new Error('שגיאת Gemini API');
             if (!rawText) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
 
             const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -3772,6 +3814,8 @@ Rules:
                     const lowerMsg = msg.toLowerCase();
                     if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
                         setAiError('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין בהגדרות ושחיבור האינטרנט פעיל.');
+                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded')) {
+                        setAiError('חריגה ממכסת ה-API של Gemini. המערכת ניסתה אוטומטית דגם חלופי. אם הבעיה נמשכת — נסה שוב בעוד מספר דקות, או בדוק את תוכנית החיוב שלך ב-aistudio.google.com.');
                     } else {
                         setAiError(msg || 'שגיאה ביצירת תוכנית עם AI');
                     }
@@ -4676,6 +4720,8 @@ Rules:
                     const lowerMsg = msg.toLowerCase();
                     if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
                         alert('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין ושחיבור האינטרנט פעיל.');
+                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded')) {
+                        alert('חריגה ממכסת ה-API של Gemini. המערכת ניסתה אוטומטית דגם חלופי. אם הבעיה נמשכת — נסה שוב בעוד מספר דקות, או בדוק את תוכנית החיוב שלך ב-aistudio.google.com.');
                     } else {
                         alert('שגיאה בעריכת תוכנית עם Gemini: ' + (msg || 'שגיאה לא ידועה'));
                     }
