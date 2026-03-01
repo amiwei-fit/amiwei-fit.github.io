@@ -1013,7 +1013,7 @@ Generate the complete plan now as JSON only.`;
 
         // Extract retry delay (in ms) from Gemini quota error message
         const parseGeminiRetryDelay = (msg) => {
-            const match = msg.match(/retry[- ]?(?:after\s*)?([\d.]+)\s*s/i);
+            const match = msg.match(/retry\s+(?:after\s+|in\s+)?([\d.]+)\s*s/i);
             // If Gemini specifies a retry time, use it; otherwise wait 10s before switching models
             return match ? Math.ceil(parseFloat(match[1])) * 1000 : 10000;
         };
@@ -1078,6 +1078,106 @@ Generate the complete plan now as JSON only.`;
             }
 
             throw lastError || new Error('שגיאת Gemini API');
+        };
+
+        // Groq AI plan generation (free tier, Llama 3.3 model)
+        const generatePlanWithGroq = async (formData, apiKey, options = {}) => {
+            const systemPrompt = getTrainingSystemPrompt();
+            const userMessage = buildTrainingUserMessage(formData, options);
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userMessage }
+                    ],
+                    max_tokens: 8192,
+                    temperature: 0.7
+                })
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `שגיאת Groq API: ${response.status}`);
+            }
+            const data = await response.json();
+            const rawText = data.choices?.[0]?.message?.content || '';
+            if (!rawText) throw new Error('לא התקבלה תוכנית תקינה מ-Groq');
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מ-Groq');
+            return processPlanExercises(JSON.parse(jsonMatch[0]));
+        };
+
+        // Groq AI plan editing
+        const editPlanWithGroq = async (currentPlan, traineeData, changeRequest, apiKey) => {
+            const trainerContext = localStorage.getItem('trainerContext') || '';
+            const trainerContextSection = trainerContext
+                ? `\n\nTRAINER'S PERSONAL METHODOLOGY:\n${trainerContext}` : '';
+            const EDIT_SYSTEM_PROMPT = `You are an expert personal trainer. You receive an existing workout plan as JSON and a specific modification request. Your job is to apply ONLY the requested changes and return the complete modified plan.\n\nCritical rules:\n- Modify ONLY what is explicitly requested — nothing more\n- Keep ALL other weeks, workouts, exercises, sets, reps, rest periods, notes, phases, and structure IDENTICAL to the input\n- All text must remain in Hebrew\n- Return the complete plan as valid JSON only — no markdown, no explanation${trainerContextSection}`;
+            const workoutProgress = {};
+            const strippedPlan = JSON.parse(JSON.stringify(currentPlan));
+            strippedPlan.weeks?.forEach(week => {
+                week.workouts?.forEach(workout => {
+                    const key = `${week.weekNumber}|${workout.day}`;
+                    workoutProgress[key] = { completed: workout.completed, feedback: workout.feedback, difficulty: workout.difficulty };
+                    delete workout.completed; delete workout.feedback; delete workout.difficulty;
+                    workout.exercises?.forEach(ex => { delete ex.videoUrl; });
+                });
+            });
+            const traineeSummary = [
+                `Trainee: ${traineeData.name}`,
+                traineeData.age ? `Age: ${traineeData.age}` : '',
+                traineeData.activityLevel ? `Level: ${traineeData.activityLevel}` : '',
+                (traineeData.goals||[]).length ? `Goals: ${traineeData.goals.join(', ')}` : ''
+            ].filter(Boolean).join('\n');
+            const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(strippedPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [
+                        { role: 'system', content: EDIT_SYSTEM_PROMPT },
+                        { role: 'user', content: userMessage }
+                    ],
+                    max_tokens: 8192,
+                    temperature: 0.7
+                })
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `שגיאת Groq API: ${response.status}`);
+            }
+            const data = await response.json();
+            const rawText = data.choices?.[0]?.message?.content || '';
+            if (!rawText) throw new Error('לא התקבלה תוכנית תקינה מ-Groq');
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מ-Groq');
+            const plan = JSON.parse(jsonMatch[0]);
+            if (plan.weeks && Array.isArray(plan.weeks)) {
+                plan.weeks.forEach(week => {
+                    if (week.workouts) {
+                        week.workouts.forEach(workout => {
+                            const key = `${week.weekNumber}|${workout.day}`;
+                            if (workoutProgress[key]) {
+                                const p = workoutProgress[key];
+                                if (p.completed !== undefined) workout.completed = p.completed;
+                                if (p.feedback !== undefined) workout.feedback = p.feedback;
+                                if (p.difficulty !== undefined) workout.difficulty = p.difficulty;
+                            }
+                            if (workout.exercises) {
+                                workout.exercises = workout.exercises.map(ex => ({ ...ex, videoUrl: ex.videoUrl || getDefaultExerciseVideoUrl(ex.name) }));
+                                const hasWarmup = workout.exercises.some(ex => ex.name && ex.name.includes('חימום ומתיחות דינמיות'));
+                                const hasCooldown = workout.exercises.some(ex => ex.name && ex.name.includes('מתיחות לשחרור'));
+                                if (!hasWarmup) workout.exercises = [...getWarmupBlock(), ...workout.exercises];
+                                if (!hasCooldown) workout.exercises = [...workout.exercises, ...getCooldownBlock()];
+                            }
+                        });
+                    }
+                });
+            }
+            return plan;
         };
 
         // Edit existing plan with Claude — applies ONLY specific requested changes, keeps everything else intact
@@ -3388,6 +3488,7 @@ Critical rules:
             const [showTrainerManagement, setShowTrainerManagement] = useState(false);
             const [settingsApiKey, setSettingsApiKey] = useState(() => localStorage.getItem('claudeApiKey') || '');
             const [settingsGeminiKey, setSettingsGeminiKey] = useState(() => localStorage.getItem('geminiApiKey') || '');
+            const [settingsGroqKey, setSettingsGroqKey] = useState(() => localStorage.getItem('groqApiKey') || '');
             const [settingsTrainerContext, setSettingsTrainerContext] = useState(() => localStorage.getItem('trainerContext') || '');
             const [settingsProxyUrl, setSettingsProxyUrl] = useState(() => localStorage.getItem('anthropicProxyUrl') || '');
             const [showGroupPrograms, setShowGroupPrograms] = useState(false);
@@ -3459,6 +3560,7 @@ Critical rules:
             const handleSaveSettings = () => {
                 localStorage.setItem('claudeApiKey', settingsApiKey.trim());
                 localStorage.setItem('geminiApiKey', settingsGeminiKey.trim());
+                localStorage.setItem('groqApiKey', settingsGroqKey.trim());
                 localStorage.setItem('trainerContext', settingsTrainerContext.trim());
                 localStorage.setItem('anthropicProxyUrl', settingsProxyUrl.trim());
                 setShowSettings(false);
@@ -3823,6 +3925,26 @@ Critical rules:
 
                                 <div className="mb-6">
                                     <label className="block text-gray-700 font-semibold mb-2">
+                                        מפתח API של Groq (Llama 3.3) — <span className="text-green-600 font-bold">חינמי</span>
+                                    </label>
+                                    <p className="text-sm text-gray-500 mb-3">
+                                        חלופה חינמית ומהירה ל-Gemini. קבל מפתח API חינמי בכתובת: <code className="bg-gray-100 px-1 rounded">console.groq.com/keys</code>
+                                    </p>
+                                    <input
+                                        type="password"
+                                        value={settingsGroqKey}
+                                        onChange={e => setSettingsGroqKey(e.target.value)}
+                                        placeholder="gsk_..."
+                                        className="w-full px-4 py-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm"
+                                        dir="ltr"
+                                    />
+                                    {settingsGroqKey && (
+                                        <p className="text-xs text-green-600 mt-2">✓ מפתח Groq הוגדר</p>
+                                    )}
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 font-semibold mb-2">
                                         כתובת פרוקסי — פתרון CORS (אופציונלי)
                                     </label>
                                     <p className="text-sm text-gray-500 mb-3">
@@ -3900,7 +4022,8 @@ Critical rules:
             const [freeTextError, setFreeTextError] = useState(null);
             const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
-            const hasAiProvider = !!(claudeApiKey || geminiApiKey);
+            const groqApiKey = localStorage.getItem('groqApiKey') || '';
+            const hasAiProvider = !!(claudeApiKey || geminiApiKey || groqApiKey);
 
             const [formData, setFormData] = useState(() => {
                 if (sourceTrainee) {
@@ -4118,6 +4241,8 @@ Rules:
                 try {
                     const plan = provider === 'gemini'
                         ? await generatePlanWithGemini(formData, geminiApiKey, { naturalDescription: freeText })
+                        : provider === 'groq'
+                        ? await generatePlanWithGroq(formData, groqApiKey, { naturalDescription: freeText })
                         : await generatePlanWithClaude(formData, claudeApiKey, { naturalDescription: freeText });
                     setGeneratedPlan(plan);
                     setStep('preview');
@@ -4210,6 +4335,8 @@ Rules:
                 try {
                     const plan = provider === 'gemini'
                         ? await generatePlanWithGemini(formData, geminiApiKey)
+                        : provider === 'groq'
+                        ? await generatePlanWithGroq(formData, groqApiKey)
                         : await generatePlanWithClaude(formData, claudeApiKey);
                     setGeneratedPlan(plan);
                     setStep('preview');
@@ -4236,13 +4363,29 @@ Rules:
                         onBack={() => setStep('form')}
                         onSave={handleSavePlan}
                         onRegenerate={handleRegeneratePlan}
-                        onAiRegenerate={hasAiProvider && !sourceTrainee ? async (sp) => {
+                        onAiRegenerate={claudeApiKey && !sourceTrainee ? async (sp) => {
                             setAiLoading(true);
                             try {
                                 const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
-                                const plan = geminiApiKey
-                                    ? await generatePlanWithGemini(updatedForm, geminiApiKey)
-                                    : await generatePlanWithClaude(updatedForm, claudeApiKey);
+                                const plan = await generatePlanWithClaude(updatedForm, claudeApiKey);
+                                setGeneratedPlan(plan);
+                            } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
+                            finally { setAiLoading(false); }
+                        } : null}
+                        onAiRegenerateGemini={geminiApiKey && !sourceTrainee ? async (sp) => {
+                            setAiLoading(true);
+                            try {
+                                const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
+                                const plan = await generatePlanWithGemini(updatedForm, geminiApiKey);
+                                setGeneratedPlan(plan);
+                            } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
+                            finally { setAiLoading(false); }
+                        } : null}
+                        onAiRegenerateGroq={groqApiKey && !sourceTrainee ? async (sp) => {
+                            setAiLoading(true);
+                            try {
+                                const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
+                                const plan = await generatePlanWithGroq(updatedForm, groqApiKey);
                                 setGeneratedPlan(plan);
                             } catch(e) { alert('שגיאה ביצירת תוכנית: ' + (e.message || '')); }
                             finally { setAiLoading(false); }
@@ -4946,6 +5089,23 @@ Rules:
                                             )}
                                         </button>
                                     )}
+                                    {groqApiKey && !sourceTrainee && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleAiGenerate(e, 'groq')}
+                                            disabled={aiLoading}
+                                            className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                                        >
+                                            {aiLoading ? (
+                                                <>
+                                                    <span className="animate-spin">⏳</span>
+                                                    יוצר תוכנית עם AI... (עד דקה)
+                                                </>
+                                            ) : (
+                                                <>⚡ צור תוכנית עם Groq / Llama <span className="text-orange-100 text-xs font-normal">(חינם)</span></>
+                                            )}
+                                        </button>
+                                    )}
                                     <button
                                         type="submit"
                                         disabled={aiLoading}
@@ -5005,6 +5165,20 @@ Rules:
                                                         <><span className="animate-spin">⏳</span>בונה תוכנית... (עד דקה)</>
                                                     ) : (
                                                         <>✨ צור עם Gemini <span className="text-green-100 text-xs font-normal">(חינם)</span></>
+                                                    )}
+                                                </button>
+                                            )}
+                                            {groqApiKey && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleFreeTextGenerate('groq')}
+                                                    disabled={aiLoading}
+                                                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-60 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                                                >
+                                                    {aiLoading ? (
+                                                        <><span className="animate-spin">⏳</span>בונה תוכנית... (עד דקה)</>
+                                                    ) : (
+                                                        <>⚡ צור עם Groq / Llama <span className="text-orange-100 text-xs font-normal">(חינם)</span></>
                                                     )}
                                                 </button>
                                             )}
@@ -5069,6 +5243,7 @@ Rules:
             const [aiLoading, setAiLoading] = useState(false);
             const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
+            const groqApiKey = localStorage.getItem('groqApiKey') || '';
 
             const handleSavePlan = async () => {
                 setSaving(true);
@@ -5135,6 +5310,22 @@ Rules:
                 }
             };
 
+            const handleAiRegenerateGroq = async (changeRequest) => {
+                if (!changeRequest || !changeRequest.trim()) {
+                    alert('אנא תאר את השינוי הרצוי לפני שתלחץ על הכפתור');
+                    return;
+                }
+                setAiLoading(true);
+                try {
+                    const newPlan = await editPlanWithGroq(currentPlan, trainee, changeRequest, groqApiKey);
+                    setCurrentPlan(newPlan);
+                } catch (err) {
+                    alert('שגיאה בעריכת תוכנית עם Groq: ' + (err.message || 'שגיאה לא ידועה'));
+                } finally {
+                    setAiLoading(false);
+                }
+            };
+
             return (
                 <PlanPreviewEditor
                     formData={trainee}
@@ -5144,6 +5335,7 @@ Rules:
                     onRegenerate={handleRegeneratePlan}
                     onAiRegenerate={claudeApiKey ? handleAiRegenerate : null}
                     onAiRegenerateGemini={geminiApiKey ? handleAiRegenerateGemini : null}
+                    onAiRegenerateGroq={groqApiKey ? handleAiRegenerateGroq : null}
                     aiRegenerateLoading={aiLoading}
                     onUpdatePlan={setCurrentPlan}
                     isEditMode={true}
@@ -5153,7 +5345,7 @@ Rules:
         }
 
         // Plan Preview and Editor
-        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onAiRegenerate, onAiRegenerateGemini, aiRegenerateLoading, onUpdatePlan, isEditMode, saving }) {
+        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onAiRegenerate, onAiRegenerateGemini, onAiRegenerateGroq, aiRegenerateLoading, onUpdatePlan, isEditMode, saving }) {
             const { allowedAI } = React.useContext(TrainerContext);
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [editingExercise, setEditingExercise] = useState(null);
@@ -5321,6 +5513,18 @@ Rules:
                                         {aiRegenerateLoading
                                             ? (isEditMode ? 'מעדכן...' : 'יוצר עם AI...')
                                             : (isEditMode ? 'החל שינוי עם Gemini' : 'שנה תוכנית עם Gemini')}
+                                    </button>
+                                )}
+                                {onAiRegenerateGroq && (
+                                    <button
+                                        onClick={() => onAiRegenerateGroq(systemPrompt)}
+                                        disabled={aiRegenerateLoading}
+                                        className="bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+                                    >
+                                        <span>{aiRegenerateLoading ? '⏳' : '⚡'}</span>
+                                        {aiRegenerateLoading
+                                            ? (isEditMode ? 'מעדכן...' : 'יוצר עם AI...')
+                                            : (isEditMode ? 'החל שינוי עם Groq' : 'שנה תוכנית עם Groq')}
                                     </button>
                                 )}
                                 <button
