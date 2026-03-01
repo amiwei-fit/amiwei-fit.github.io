@@ -1026,7 +1026,8 @@ Generate the complete plan now as JSON only.`;
             if (lower.includes('per_day') || lower.includes('per day') || lower.includes('daily')) {
                 return 'חרגת מהמכסה היומית של Gemini. נסה שוב מחר, או עדכן את תוכנית ה-API שלך ב-aistudio.google.com.';
             }
-            return 'חריגה ממכסת ה-API של Gemini. המערכת ניסתה אוטומטית דגם חלופי. אם הבעיה נמשכת — נסה שוב בעוד מספר דקות, או בדוק את תוכנית החיוב שלך ב-aistudio.google.com.';
+            const detail = errMsg ? `\nפירוט מ-Gemini: "${errMsg}"` : '';
+            return `חריגה ממכסת ה-API של Gemini — ייתכן שחרגת מהמכסה היומית (1,500 בקשות ביום לגרסה החינמית). המערכת ניסתה אוטומטית את כל הדגמים הזמינים.\n\nכדי לפתור: בדוק את השימוש שלך ב-aistudio.google.com — אם המכסה מוצתה, נסה שוב מחר, או עדכן לחשבון בתשלום.${detail}`;
         };
 
         // Gemini AI plan generation with retry and model fallback
