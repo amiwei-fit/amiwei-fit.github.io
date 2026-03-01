@@ -393,6 +393,7 @@
                 { keys: ['crunch', 'כפיפות בטן', 'sit-up', 'ab exercise'], url: 'https://www.youtube.com/results?search_query=crunches+ab+exercise+proper+form+tutorial' },
                 { keys: ['lateral step', 'clamshell', 'adduction', 'miniband'], url: 'https://www.youtube.com/results?search_query=resistance+band+hip+exercise+proper+form+tutorial' },
                 { keys: ['trx'], url: 'https://www.youtube.com/results?search_query=TRX+suspension+training+proper+form+tutorial' },
+                { keys: ['door frame row', 'door frame rows', 'חתירה במסגרת הדלת', 'חתירה בדלת'], url: 'https://www.youtube.com/watch?v=r8NzhNe9Res' },
             ];
             for (const entry of map) {
                 if (entry.keys.some(k => lower.includes(k.toLowerCase()))) return entry.url;
@@ -1774,6 +1775,7 @@ Critical rules:
                 exercises = [
                     { name: 'סקוואט (Squat)', sets: setsPerExercise, reps: '10-15', rest: 90, notes: `רגליים קדמיות. ${progressionNote}` },
                     { name: 'נגיעות כתף (Shoulder Taps)', sets: setsPerExercise, reps: '10 לכל צד', rest: 60, notes: 'חיזוק ליבה ויציבות כתף. חלופה מומלצת לשכיבות סמיכה עד שמבצעים 8+ חזרות. שמור על אגן יציב.' },
+                    { name: 'חתירה במסגרת הדלת (Door Frame Rows)', sets: setsPerExercise, reps: '10-15', rest: 60, notes: 'גב רחב ללא ציוד. עמוד בצד מסגרת הדלת, אחוז את הדלת בשתי הידיים, הישען אחורה ומשוך את החזה לכיוון הדלת.', videoUrl: 'https://www.youtube.com/watch?v=r8NzhNe9Res' },
                     { name: 'סופרמן - עלייה, שחייה, ירידה', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'גב תחתון, גלוטס.' },
                     { name: 'לאנג\'ים (Lunges)', sets: setsPerExercise, reps: '10 לכל רגל', rest: 60, notes: 'רגליים ושיווי משקל.' },
                     { name: 'פלאנק (Plank)', sets: setsPerExercise, duration: '30 שניות', rest: 60, notes: 'ליבה.' },
@@ -1858,6 +1860,7 @@ Critical rules:
                         { name: 'TRX Fly (תנועת T, W, I)', sets: 3, reps: '12-15', rest: 60, notes: 'פנים לרצועות - גב עליון' }
                     ],
                     bodyweight: [
+                        { name: 'חתירה במסגרת הדלת (Door Frame Rows)', sets: 4, reps: '10-15', rest: 60, notes: 'גב רחב ללא ציוד. עמוד בצד מסגרת הדלת, אחוז את הדלת בשתי הידיים, הישען אחורה ומשוך את החזה לכיוון הדלת.', videoUrl: 'https://www.youtube.com/watch?v=r8NzhNe9Res' },
                         { name: 'עליות מתח לפנים (Pull-ups / Chin-ups)', sets: 4, reps: 'מקסימום', rest: 120, notes: 'צר-פשיטה, רחב-קרוב' },
                         { name: 'עליות מתח בגרביטון (Assisted Pull-ups)', sets: 4, reps: '8-12', rest: 90, notes: 'ככל שיש יותר משקל - קל יותר' },
                         { name: 'חתירה אוסטרלית (Australian Pull-ups)', sets: 4, reps: '12-15', rest: 60, notes: 'על מוט נמוך או שולחן' },
@@ -2096,6 +2099,7 @@ Critical rules:
                         [
                             { name: 'סקוואט (Squat)', sets: setsLarge, reps: '15-20', rest: 60, notes: 'רגליים קדמיות.' },
                             { name: 'שכיבת סמיכה + Shoulder Tap לסירוגין', sets: setsLarge, reps: '8-10', rest: 60, notes: 'ביצוע: שכיבת סמיכה → tap ימין → שכיבת סמיכה → tap שמאל. חזה, כתפיים, ליבה. מעבר לשכיבות סמיכה מלאות כשמגיעים ל-8+ חזרות.' },
+                            { name: 'חתירה במסגרת הדלת (Door Frame Rows)', sets: setsLarge, reps: '10-15', rest: 60, notes: 'גב רחב ללא ציוד. עמוד בצד מסגרת הדלת, אחוז את הדלת בשתי הידיים, הישען אחורה ומשוך את החזה לכיוון הדלת.', videoUrl: 'https://www.youtube.com/watch?v=r8NzhNe9Res' },
                             { name: 'סופרמן - עלייה, שחייה, ירידה', sets: 3, duration: '30 שניות', rest: 60, notes: 'גב תחתון, גלוטס.' },
                             { name: 'פלאנק', sets: 3, duration: '45-60 שניות', rest: 60, notes: 'ליבה.' },
                             { name: 'לאנג\'ים', sets: setsLarge, reps: '12 לכל רגל', rest: 60, notes: 'רגליים.' },
@@ -2106,8 +2110,7 @@ Critical rules:
                         [
                             { name: 'Pistol Squat (חד-רגלי) - עם עזרה', sets: setsLarge, reps: '8 לכל רגל', rest: 90, notes: 'רגל חד-צדדית.' },
                             { name: 'שכיבות סמיכה רחבות', sets: setsLarge, reps: '10-15', rest: 60, notes: 'חזה.' },
-                            { name: 'חתירה אוסטרלית (Australian Pull-ups)', sets: setsLarge, reps: '12-15', rest: 90, notes: 'גב.' },
-                            { name: 'עליות מתח (Pull-ups)', sets: setsLarge, reps: 'מקסימום', rest: 120, notes: 'גב וביצפס.' },
+                            { name: 'חתירה במסגרת הדלת (Door Frame Rows)', sets: setsLarge, reps: '12-15', rest: 90, notes: 'גב רחב ללא ציוד. עמוד בצד מסגרת הדלת, אחוז את הדלת בשתי הידיים, הישען אחורה ומשוך את החזה לכיוון הדלת.', videoUrl: 'https://www.youtube.com/watch?v=r8NzhNe9Res' },
                             { name: 'שכיבות סמיכה יהלום (Diamond Push-ups)', sets: setsSmall, reps: '12-15', rest: 60, notes: 'טריצפס.' },
                             { name: 'פלאנק צידי', sets: 3, duration: '30-45 שניות לכל צד', rest: 45, notes: 'ליבה.' },
                             { name: 'Jump Squats', sets: 3, reps: '12-15', rest: 90, notes: 'כוח נפיץ - רגליים.' }
