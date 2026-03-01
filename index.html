@@ -1013,8 +1013,20 @@ Generate the complete plan now as JSON only.`;
 
         // Extract retry delay (in ms) from Gemini quota error message
         const parseGeminiRetryDelay = (msg) => {
-            const match = msg.match(/retry in ([\d.]+)s/i);
-            return match ? Math.ceil(parseFloat(match[1])) * 1000 : 20000;
+            const match = msg.match(/retry[- ]?(?:after\s*)?([\d.]+)\s*s/i);
+            return match ? Math.ceil(parseFloat(match[1])) * 1000 : 0;
+        };
+
+        // Return a user-friendly Hebrew message for Gemini quota/rate errors
+        const getGeminiQuotaErrorMsg = (errMsg) => {
+            const lower = errMsg.toLowerCase();
+            if (lower.includes('per_minute') || lower.includes('per minute') || lower.includes('rate_limit') || lower.includes('retry')) {
+                return 'הגעת למגבלת הבקשות לדקה של Gemini. המערכת ניסתה דגם חלופי. המתן כדקה ונסה שוב.';
+            }
+            if (lower.includes('per_day') || lower.includes('per day') || lower.includes('daily')) {
+                return 'חרגת מהמכסה היומית של Gemini. נסה שוב מחר, או עדכן את תוכנית ה-API שלך ב-aistudio.google.com.';
+            }
+            return 'חריגה ממכסת ה-API של Gemini. המערכת ניסתה אוטומטית דגם חלופי. אם הבעיה נמשכת — נסה שוב בעוד מספר דקות, או בדוק את תוכנית החיוב שלך ב-aistudio.google.com.';
         };
 
         // Gemini AI plan generation with retry and model fallback
@@ -1042,11 +1054,13 @@ Generate the complete plan now as JSON only.`;
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({}));
                         const errorMsg = err.error?.message || '';
-                        const isQuotaError = response.status === 429 || errorMsg.toLowerCase().includes('quota');
+                        const isQuotaError = response.status === 429 || errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('resource_exhausted');
                         if (isQuotaError && attempt === 0) {
                             const delay = parseGeminiRetryDelay(errorMsg);
-                            await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
-                            continue;
+                            if (delay > 0) {
+                                await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
+                                continue;
+                            }
                         }
                         lastError = new Error(errorMsg || `שגיאת Gemini API: ${response.status}`);
                         break;
@@ -1275,11 +1289,13 @@ Critical rules:
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({}));
                         const errorMsg = err.error?.message || '';
-                        const isQuotaError = response.status === 429 || errorMsg.toLowerCase().includes('quota');
+                        const isQuotaError = response.status === 429 || errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('resource_exhausted');
                         if (isQuotaError && attempt === 0) {
                             const delay = parseGeminiRetryDelay(errorMsg);
-                            await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
-                            continue;
+                            if (delay > 0) {
+                                await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
+                                continue;
+                            }
                         }
                         lastEditError = new Error(errorMsg || `שגיאת Gemini API: ${response.status}`);
                         break;
@@ -4099,6 +4115,8 @@ Rules:
                     const lowerMsg = msg.toLowerCase();
                     if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
                         setFreeTextError('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין ושחיבור האינטרנט פעיל.');
+                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded') || lowerMsg.includes('resource_exhausted') || lowerMsg.includes('429')) {
+                        setFreeTextError(getGeminiQuotaErrorMsg(msg));
                     } else {
                         setFreeTextError(msg || 'שגיאה ביצירת תוכנית');
                     }
@@ -4189,8 +4207,8 @@ Rules:
                     const lowerMsg = msg.toLowerCase();
                     if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
                         setAiError('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין בהגדרות ושחיבור האינטרנט פעיל.');
-                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded')) {
-                        setAiError('חריגה ממכסת ה-API של Gemini. המערכת ניסתה אוטומטית דגם חלופי. אם הבעיה נמשכת — נסה שוב בעוד מספר דקות, או בדוק את תוכנית החיוב שלך ב-aistudio.google.com.');
+                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded') || lowerMsg.includes('resource_exhausted') || lowerMsg.includes('429')) {
+                        setAiError(getGeminiQuotaErrorMsg(msg));
                     } else {
                         setAiError(msg || 'שגיאה ביצירת תוכנית עם AI');
                     }
@@ -5096,8 +5114,8 @@ Rules:
                     const lowerMsg = msg.toLowerCase();
                     if (lowerMsg.includes('failed to fetch') || lowerMsg === 'load failed' || lowerMsg.includes('networkerror') || lowerMsg.includes('network error') || lowerMsg.includes('fetch')) {
                         alert('שגיאת חיבור לשרת AI. ודא שמפתח ה-API תקין ושחיבור האינטרנט פעיל.');
-                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded')) {
-                        alert('חריגה ממכסת ה-API של Gemini. המערכת ניסתה אוטומטית דגם חלופי. אם הבעיה נמשכת — נסה שוב בעוד מספר דקות, או בדוק את תוכנית החיוב שלך ב-aistudio.google.com.');
+                    } else if (lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('exceeded') || lowerMsg.includes('resource_exhausted') || lowerMsg.includes('429')) {
+                        alert(getGeminiQuotaErrorMsg(msg));
                     } else {
                         alert('שגיאה בעריכת תוכנית עם Gemini: ' + (msg || 'שגיאה לא ידועה'));
                     }
