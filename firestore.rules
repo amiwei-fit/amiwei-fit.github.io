@@ -40,5 +40,10 @@ service cloud.firestore {
         .affectedKeys()
         .hasOnly(['workoutPlan', 'updatedAt']);
     }
+
+    match /trainers/{trainerId} {
+      // Only authenticated users (admin or sub-trainers) can read/write trainer documents
+      allow read, write: if request.auth != null;
+    }
   }
 }

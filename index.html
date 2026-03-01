@@ -168,6 +168,69 @@
             }
         };
 
+        // Trainer accounts storage (managed by admin)
+        const TRAINER_EMAIL_SUFFIX = '@amiwei-trainer.local';
+        const trainerStorage = {
+            getTrainers: async () => {
+                try {
+                    const snapshot = await db.collection('trainers').orderBy('createdAt', 'desc').get();
+                    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } catch (error) {
+                    console.error('Error getting trainers:', error);
+                    return [];
+                }
+            },
+            saveTrainer: async (trainer) => {
+                try {
+                    const data = {
+                        ...trainer,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    await db.collection('trainers').doc(trainer.id).set(data);
+                    return trainer;
+                } catch (error) {
+                    console.error('Error saving trainer:', error);
+                    throw error;
+                }
+            },
+            updateTrainer: async (trainerId, updates) => {
+                try {
+                    await db.collection('trainers').doc(trainerId).update({
+                        ...updates,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (error) {
+                    console.error('Error updating trainer:', error);
+                    throw error;
+                }
+            },
+            deleteTrainer: async (trainerId) => {
+                try {
+                    await db.collection('trainers').doc(trainerId).delete();
+                } catch (error) {
+                    console.error('Error deleting trainer:', error);
+                    throw error;
+                }
+            },
+            getTrainerByUid: async (uid) => {
+                try {
+                    const snapshot = await db.collection('trainers').where('uid', '==', uid).get();
+                    if (!snapshot.empty) {
+                        const doc = snapshot.docs[0];
+                        return { id: doc.id, ...doc.data() };
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('Error getting trainer by uid:', error);
+                    return null;
+                }
+            }
+        };
+
+        // React context for trainer permissions (isAdmin, trainerUser, allowedAI)
+        const TrainerContext = React.createContext({ isAdmin: true, trainerUser: null, allowedAI: 'both' });
+
         // Group Programs & Members Storage
         const groupStorage = {
             getGroupPrograms: async () => {
@@ -2897,17 +2960,290 @@ Critical rules:
             }
         }
 
+        // Trainer Management Section (admin only)
+        function TrainerManagementSection({ onBack }) {
+            const [trainers, setTrainers] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [showAddForm, setShowAddForm] = useState(false);
+            const [newName, setNewName] = useState('');
+            const [newUsername, setNewUsername] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [newAllowedAI, setNewAllowedAI] = useState('both');
+            const [saving, setSaving] = useState(false);
+            const [formError, setFormError] = useState('');
+            const [createdCredentials, setCreatedCredentials] = useState(null);
+
+            useEffect(() => { loadTrainers(); }, []);
+
+            const loadTrainers = async () => {
+                setLoading(true);
+                const data = await trainerStorage.getTrainers();
+                setTrainers(data);
+                setLoading(false);
+            };
+
+            const handleAddTrainer = async (e) => {
+                e.preventDefault();
+                setFormError('');
+                if (!newName.trim() || !newUsername.trim() || !newPassword.trim()) {
+                    setFormError('יש למלא את כל השדות');
+                    return;
+                }
+                if (newUsername.includes('@') || newUsername.includes(' ')) {
+                    setFormError('שם המשתמש לא יכול לכלול @ או רווח');
+                    return;
+                }
+                setSaving(true);
+                try {
+                    // Use a secondary Firebase app to create the Auth account without signing out admin
+                    const secondaryApp = firebase.initializeApp(firebase.app().options, 'TrainerCreation_' + Date.now());
+                    const secondaryAuth = firebase.auth(secondaryApp);
+                    let uid;
+                    try {
+                        const cred = await secondaryAuth.createUserWithEmailAndPassword(
+                            newUsername.trim() + TRAINER_EMAIL_SUFFIX,
+                            newPassword
+                        );
+                        uid = cred.user.uid;
+                        await secondaryAuth.signOut();
+                    } finally {
+                        await secondaryApp.delete();
+                    }
+                    // Save trainer data in Firestore
+                    const trainerId = 'trainer_' + uid;
+                    await trainerStorage.saveTrainer({
+                        id: trainerId,
+                        uid,
+                        name: newName.trim(),
+                        username: newUsername.trim(),
+                        allowedAI: newAllowedAI
+                    });
+                    setCreatedCredentials({ name: newName.trim(), username: newUsername.trim(), password: newPassword, allowedAI: newAllowedAI });
+                    setNewName(''); setNewUsername(''); setNewPassword(''); setNewAllowedAI('both');
+                    setShowAddForm(false);
+                    await loadTrainers();
+                } catch (err) {
+                    if (err.code === 'auth/email-already-in-use') {
+                        setFormError('שם המשתמש כבר קיים במערכת');
+                    } else {
+                        setFormError('שגיאה ביצירת מאמן: ' + err.message);
+                    }
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            const handleDeleteTrainer = async (trainer) => {
+                if (!window.confirm(`למחוק את המאמן "${trainer.name}" (${trainer.username})?\nהמאמן לא יוכל יותר להתחבר.`)) return;
+                try {
+                    await trainerStorage.deleteTrainer(trainer.id);
+                    await loadTrainers();
+                } catch (err) {
+                    alert('שגיאה במחיקת מאמן: ' + err.message);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <div className="gradient-bg text-white p-6 shadow-lg">
+                        <div className="max-w-4xl mx-auto">
+                            <button onClick={onBack} className="mb-4 text-white hover:text-purple-100 font-semibold flex items-center gap-2">
+                                ← חזרה לדשבורד
+                            </button>
+                            <h1 className="text-2xl font-bold">👨‍💼 ניהול מאמנים</h1>
+                            <p className="text-purple-100 mt-1">הוסף מאמנים ונהל את הרשאות ה-AI שלהם</p>
+                        </div>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto p-6">
+                        {createdCredentials && (
+                            <div className="bg-green-50 border-2 border-green-400 rounded-2xl p-6 mb-6" dir="rtl">
+                                <h3 className="text-lg font-bold text-green-800 mb-3">✅ מאמן נוצר בהצלחה!</h3>
+                                <p className="text-green-700 mb-3">שלח למאמן את פרטי הגישה הבאים:</p>
+                                <div className="bg-white rounded-xl p-4 border border-green-300 font-mono text-sm space-y-1">
+                                    <div><span className="text-gray-500">שם:</span> <strong>{createdCredentials.name}</strong></div>
+                                    <div><span className="text-gray-500">שם משתמש:</span> <strong dir="ltr">{createdCredentials.username}</strong></div>
+                                    <div><span className="text-gray-500">סיסמה:</span> <strong dir="ltr">{createdCredentials.password}</strong></div>
+                                    <div><span className="text-gray-500">הרשאות AI:</span> <strong>{createdCredentials.allowedAI === 'both' ? 'Gemini + Claude' : 'Gemini בלבד'}</strong></div>
+                                </div>
+                                <button
+                                    onClick={() => setCreatedCredentials(null)}
+                                    className="mt-4 text-sm text-green-600 hover:text-green-800 underline"
+                                >
+                                    סגור
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold text-gray-800">מאמנים ({trainers.length})</h2>
+                            <button
+                                onClick={() => setShowAddForm(true)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-xl transition flex items-center gap-2"
+                            >
+                                <span>➕</span> הוסף מאמן
+                            </button>
+                        </div>
+
+                        {loading ? (
+                            <div className="text-center py-12 text-gray-500">טוען...</div>
+                        ) : trainers.length === 0 ? (
+                            <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">
+                                <div className="text-5xl mb-4">👨‍💼</div>
+                                <p className="text-lg font-medium">אין מאמנים עדיין</p>
+                                <p className="text-sm mt-1">לחץ על "הוסף מאמן" כדי להוסיף את המאמן הראשון</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {trainers.map(trainer => (
+                                    <div key={trainer.id} className="bg-white rounded-2xl shadow p-5 flex items-center justify-between" dir="rtl">
+                                        <div>
+                                            <div className="font-bold text-gray-800 text-lg">{trainer.name}</div>
+                                            <div className="text-sm text-gray-500 mt-0.5" dir="ltr">{trainer.username}</div>
+                                            <div className="mt-2">
+                                                {trainer.allowedAI === 'gemini' ? (
+                                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">Gemini בלבד</span>
+                                                ) : (
+                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">Gemini + Claude</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => handleDeleteTrainer(trainer)}
+                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition text-sm font-medium"
+                                        >
+                                            מחק
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {showAddForm && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full" dir="rtl">
+                                    <h2 className="text-xl font-bold text-gray-800 mb-6">הוספת מאמן חדש</h2>
+                                    <form onSubmit={handleAddTrainer} className="space-y-4">
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-1">שם מלא</label>
+                                            <input
+                                                type="text"
+                                                value={newName}
+                                                onChange={e => setNewName(e.target.value)}
+                                                placeholder="ישראל ישראלי"
+                                                required
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-1">שם משתמש (לכניסה)</label>
+                                            <input
+                                                type="text"
+                                                value={newUsername}
+                                                onChange={e => setNewUsername(e.target.value.toLowerCase().replace(/[@ ]/g, ''))}
+                                                placeholder="israel123"
+                                                required
+                                                dir="ltr"
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                            />
+                                            <p className="text-xs text-gray-400 mt-1">אותיות לועזיות, מספרים, ללא רווחים</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-1">סיסמה</label>
+                                            <input
+                                                type="text"
+                                                value={newPassword}
+                                                onChange={e => setNewPassword(e.target.value)}
+                                                placeholder="סיסמה ראשונית"
+                                                required
+                                                dir="ltr"
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-2">הרשאות AI</label>
+                                            <div className="space-y-2">
+                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'gemini' ? '#16a34a' : '#e5e7eb'}}>
+                                                    <input
+                                                        type="radio"
+                                                        name="allowedAI"
+                                                        value="gemini"
+                                                        checked={newAllowedAI === 'gemini'}
+                                                        onChange={() => setNewAllowedAI('gemini')}
+                                                        className="accent-green-600"
+                                                    />
+                                                    <div>
+                                                        <div className="font-semibold text-green-700">✨ Gemini בלבד</div>
+                                                        <div className="text-xs text-gray-500">המאמן יוכל ליצור תוכניות עם Gemini (חינמי)</div>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style={{borderColor: newAllowedAI === 'both' ? '#4f46e5' : '#e5e7eb'}}>
+                                                    <input
+                                                        type="radio"
+                                                        name="allowedAI"
+                                                        value="both"
+                                                        checked={newAllowedAI === 'both'}
+                                                        onChange={() => setNewAllowedAI('both')}
+                                                        className="accent-indigo-600"
+                                                    />
+                                                    <div>
+                                                        <div className="font-semibold text-indigo-700">🤖 Gemini + Claude</div>
+                                                        <div className="text-xs text-gray-500">המאמן יוכל להשתמש בשני ה-AI</div>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        {formError && (
+                                            <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">{formError}</div>
+                                        )}
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                type="submit"
+                                                disabled={saving}
+                                                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition"
+                                            >
+                                                {saving ? 'יוצר...' : 'צור מאמן'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowAddForm(false); setFormError(''); }}
+                                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition"
+                                            >
+                                                ביטול
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
         // Trainer App
         function TrainerApp() {
             const [authUser, setAuthUser] = useState(undefined); // undefined = loading
-            const [email, setEmail] = useState('');
+            const [trainerUser, setTrainerUser] = useState(null); // sub-trainer logged in via Firestore
+            const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
 
             useEffect(() => {
-                const unsubscribe = auth.onAuthStateChanged(user => {
-                    setAuthUser(user); // null = not logged in, object = logged in
+                const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        // Check if this user is a sub-trainer (has a record in trainers collection)
+                        const trainerDoc = await trainerStorage.getTrainerByUid(user.uid);
+                        if (trainerDoc) {
+                            setTrainerUser(trainerDoc);
+                        } else {
+                            setTrainerUser(null); // admin
+                        }
+                    } else {
+                        setTrainerUser(null);
+                    }
+                    setAuthUser(user);
                 });
                 return () => unsubscribe();
             }, []);
@@ -2917,25 +3253,29 @@ Critical rules:
                 setError('');
                 setLoading(true);
                 try {
-                    await auth.signInWithEmailAndPassword(email, password);
+                    // Determine the Firebase Auth email to use
+                    const loginEmail = username.includes('@')
+                        ? username // admin uses their real email
+                        : username.trim() + TRAINER_EMAIL_SUFFIX; // sub-trainer uses constructed email
+                    await auth.signInWithEmailAndPassword(loginEmail, password);
                 } catch (err) {
                     if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-                        // First-time setup: create the account
-                        try {
-                            await auth.createUserWithEmailAndPassword(email, password);
-                        } catch (createErr) {
-                            setError('שגיאה ביצירת חשבון: ' + createErr.message);
-                        }
-                    } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+                        setError('שם משתמש לא נמצא');
+                    } else if (err.code === 'auth/wrong-password') {
                         setError('סיסמה שגויה');
                     } else if (err.code === 'auth/invalid-email') {
-                        setError('כתובת מייל לא תקינה');
+                        setError('שם משתמש לא תקין');
                     } else {
                         setError('שגיאת כניסה: ' + err.message);
                     }
                 } finally {
                     setLoading(false);
                 }
+            };
+
+            const handleLogout = async () => {
+                await auth.signOut();
+                setTrainerUser(null);
             };
 
             // Still loading auth state
@@ -2954,18 +3294,19 @@ Critical rules:
                             <div className="text-center mb-8">
                                 <div className="text-6xl mb-4">🔒</div>
                                 <h1 className="text-3xl font-bold text-gray-800 mb-2">כניסת מאמן</h1>
-                                <p className="text-gray-600">כניסה עם מייל וסיסמה</p>
+                                <p className="text-gray-600">כניסה עם שם משתמש וסיסמה</p>
                             </div>
 
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
                                     <input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="כתובת מייל"
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        placeholder="שם משתמש"
                                         required
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        dir="ltr"
                                     />
                                 </div>
                                 <div>
@@ -2989,19 +3330,24 @@ Critical rules:
                                     {loading ? 'מתחבר...' : 'כניסה'}
                                 </button>
                             </form>
-                            <p className="text-center text-xs text-gray-400 mt-4">
-                                בפעם הראשונה: הזן מייל וסיסמה לבחירתך ליצירת חשבון
-                            </p>
                         </div>
                     </div>
                 );
             }
 
-            return <TrainerDashboard />;
+            const isAdmin = authUser && !trainerUser;
+            const allowedAI = trainerUser ? (trainerUser.allowedAI || 'both') : 'both';
+
+            return (
+                <TrainerContext.Provider value={{ isAdmin, trainerUser, allowedAI }}>
+                    <TrainerDashboard onLogout={handleLogout} />
+                </TrainerContext.Provider>
+            );
         }
 
         // Trainer Dashboard
-        function TrainerDashboard() {
+        function TrainerDashboard({ onLogout }) {
+            const { isAdmin, trainerUser } = React.useContext(TrainerContext);
             const [trainees, setTrainees] = useState([]);
             const [showCreateForm, setShowCreateForm] = useState(false);
             const [sourceTrainee, setSourceTrainee] = useState(null);
@@ -3012,6 +3358,7 @@ Critical rules:
             const [loading, setLoading] = useState(true);
             const [showArchive, setShowArchive] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
+            const [showTrainerManagement, setShowTrainerManagement] = useState(false);
             const [settingsApiKey, setSettingsApiKey] = useState(() => localStorage.getItem('claudeApiKey') || '');
             const [settingsGeminiKey, setSettingsGeminiKey] = useState(() => localStorage.getItem('geminiApiKey') || '');
             const [settingsTrainerContext, setSettingsTrainerContext] = useState(() => localStorage.getItem('trainerContext') || '');
@@ -3031,10 +3378,6 @@ Critical rules:
 
             const refreshTrainees = async () => {
                 await loadTrainees();
-            };
-
-            const handleLogout = async () => {
-                await auth.signOut();
             };
 
             const handleArchive = async (e, traineeId) => {
@@ -3102,6 +3445,14 @@ Critical rules:
                             <div className="text-2xl font-bold text-gray-700">טוען נתונים...</div>
                         </div>
                     </div>
+                );
+            }
+
+            if (showTrainerManagement) {
+                return (
+                    <TrainerManagementSection
+                        onBack={() => setShowTrainerManagement(false)}
+                    />
                 );
             }
 
@@ -3190,15 +3541,17 @@ Critical rules:
                                 <p className="text-purple-100 mt-1">ניהול מתאמנים ותוכניות אימון</p>
                             </div>
                             <div className="flex gap-2">
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => setShowSettings(true)}
+                                        className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
+                                        title="הגדרות"
+                                    >
+                                        ⚙️ הגדרות
+                                    </button>
+                                )}
                                 <button
-                                    onClick={() => setShowSettings(true)}
-                                    className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
-                                    title="הגדרות"
-                                >
-                                    ⚙️ הגדרות
-                                </button>
-                                <button
-                                    onClick={handleLogout}
+                                    onClick={onLogout}
                                     className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
                                 >
                                     התנתק
@@ -3208,6 +3561,15 @@ Critical rules:
                     </div>
 
                     <div className="max-w-6xl mx-auto p-6">
+                        {trainerUser && (
+                            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2 text-blue-800 text-sm">
+                                <span>👤</span>
+                                <span>מחובר כמאמן: <strong>{trainerUser.name || trainerUser.username}</strong></span>
+                                {trainerUser.allowedAI === 'gemini' && (
+                                    <span className="mr-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Gemini בלבד</span>
+                                )}
+                            </div>
+                        )}
                         <div className="mb-6 flex gap-3 flex-wrap">
                             <button
                                 onClick={() => setShowCreateForm(true)}
@@ -3223,6 +3585,15 @@ Critical rules:
                                 <span className="text-xl">👥</span>
                                 תוכניות קבוצתיות
                             </button>
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setShowTrainerManagement(true)}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition shadow-lg flex items-center gap-2"
+                                >
+                                    <span className="text-xl">👨‍💼</span>
+                                    ניהול מאמנים
+                                </button>
+                            )}
                         </div>
 
                         {!showArchive && draftTrainees.length > 0 && (
@@ -3486,6 +3857,7 @@ Critical rules:
 
         // Create Trainee Plan Form
         function CreateTraineePlan({ onBack, onComplete, sourceTrainee, draftTrainee }) {
+            const { allowedAI } = React.useContext(TrainerContext);
             const [step, setStep] = useState('form'); // 'form' or 'preview'
             const [generatedPlan, setGeneratedPlan] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
@@ -3499,7 +3871,7 @@ Critical rules:
             const [draftSavedMsg, setDraftSavedMsg] = useState('');
             const [freeText, setFreeText] = useState('');
             const [freeTextError, setFreeTextError] = useState(null);
-            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
+            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
             const hasAiProvider = !!(claudeApiKey || geminiApiKey);
 
@@ -4662,10 +5034,11 @@ Rules:
 
         // Edit Existing Trainee Plan
         function EditTraineePlan({ trainee, onBack, onComplete }) {
+            const { allowedAI } = React.useContext(TrainerContext);
             const [currentPlan, setCurrentPlan] = useState(trainee.workoutPlan);
             const [saving, setSaving] = useState(false);
             const [aiLoading, setAiLoading] = useState(false);
-            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
+            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
 
             const handleSavePlan = async () => {
@@ -4752,6 +5125,7 @@ Rules:
 
         // Plan Preview and Editor
         function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onAiRegenerate, onAiRegenerateGemini, aiRegenerateLoading, onUpdatePlan, isEditMode, saving }) {
+            const { allowedAI } = React.useContext(TrainerContext);
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [editingExercise, setEditingExercise] = useState(null);
             const [showSuggestions, setShowSuggestions] = useState(false);
@@ -4759,7 +5133,7 @@ Rules:
             const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [addMenuOpen, setAddMenuOpen] = useState(null);
-            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
+            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
 
             const currentWeek = workoutPlan.weeks[selectedWeek];
 
@@ -6582,6 +6956,7 @@ ${traineeLink}
 
         // ─── GROUP PROGRAM: Create Screen (Trainer) ───────────────────────────
         function GroupProgramCreateScreen({ onBack, onComplete, trainees }) {
+            const { allowedAI } = React.useContext(TrainerContext);
             const [programName, setProgramName] = useState('');
             const [description, setDescription] = useState('');
             const [selectedTraineeId, setSelectedTraineeId] = useState('');
@@ -6591,7 +6966,7 @@ ${traineeLink}
             const [aiText, setAiText] = useState('');
             const [aiGeneratedPlan, setAiGeneratedPlan] = useState(null);
             const geminiApiKey = localStorage.getItem('geminiApiKey') || '';
-            const claudeApiKey = localStorage.getItem('claudeApiKey') || '';
+            const claudeApiKey = allowedAI === 'both' ? (localStorage.getItem('claudeApiKey') || '') : '';
             const hasAiProvider = !!(claudeApiKey || geminiApiKey);
 
             const availableTrainees = trainees.filter(t => !t.archived && !t.isDraft && t.workoutPlan);
