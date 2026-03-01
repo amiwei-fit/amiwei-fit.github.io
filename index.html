@@ -1014,7 +1014,8 @@ Generate the complete plan now as JSON only.`;
         // Extract retry delay (in ms) from Gemini quota error message
         const parseGeminiRetryDelay = (msg) => {
             const match = msg.match(/retry[- ]?(?:after\s*)?([\d.]+)\s*s/i);
-            return match ? Math.ceil(parseFloat(match[1])) * 1000 : 0;
+            // If Gemini specifies a retry time, use it; otherwise wait 10s before switching models
+            return match ? Math.ceil(parseFloat(match[1])) * 1000 : 10000;
         };
 
         // Return a user-friendly Hebrew message for Gemini quota/rate errors
