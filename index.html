@@ -16,6 +16,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <!-- PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
     <style>
         body {
@@ -1045,7 +1047,7 @@ Generate the complete plan now as JSON only.`;
         const generatePlanWithGemini = async (formData, apiKey, options = {}) => {
             const systemPrompt = getTrainingSystemPrompt();
             const userMessage = buildTrainingUserMessage(formData, options);
-            const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+            const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite'];
             let lastError = null;
 
             for (const model of models) {
@@ -1058,7 +1060,7 @@ Generate the complete plan now as JSON only.`;
                             body: JSON.stringify({
                                 system_instruction: { parts: [{ text: systemPrompt }] },
                                 contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-                                generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+                                generationConfig: { maxOutputTokens: 8192, temperature: 0.7, responseMimeType: 'application/json' }
                             })
                         }
                     );
@@ -1080,11 +1082,17 @@ Generate the complete plan now as JSON only.`;
 
                     const data = await response.json();
                     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                    if (!rawText) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
+                    if (!rawText) { lastError = new Error('לא התקבלה תוכנית תקינה מ-Gemini'); break; }
                     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-                    if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
-                    return processPlanExercises(JSON.parse(jsonMatch[0]));
+                    if (!jsonMatch) { lastError = new Error('לא התקבלה תוכנית תקינה מ-Gemini'); break; }
+                    try {
+                        return processPlanExercises(JSON.parse(jsonMatch[0]));
+                    } catch (parseErr) {
+                        lastError = new Error('Gemini החזיר JSON לא תקין — נסה שוב');
+                        break;
+                    }
                 }
+                if (!lastError || lastError.message.includes('JSON')) break;
             }
 
             throw lastError || new Error('שגיאת Gemini API');
@@ -1378,7 +1386,7 @@ Critical rules:
 
             const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(strippedPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
 
-            const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+            const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite'];
             let rawText = '';
             let lastEditError = null;
             let gotResponse = false;
@@ -1393,7 +1401,7 @@ Critical rules:
                             body: JSON.stringify({
                                 system_instruction: { parts: [{ text: EDIT_SYSTEM_PROMPT }] },
                                 contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-                                generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+                                generationConfig: { maxOutputTokens: 8192, temperature: 0.7, responseMimeType: 'application/json' }
                             })
                         }
                     );
@@ -1427,7 +1435,12 @@ Critical rules:
             const jsonMatch = rawText.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error('לא התקבלה תוכנית תקינה מ-Gemini');
 
-            const plan = JSON.parse(jsonMatch[0]);
+            let plan;
+            try {
+                plan = JSON.parse(jsonMatch[0]);
+            } catch (parseErr) {
+                throw new Error('Gemini החזיר JSON לא תקין — נסה שוב');
+            }
 
             if (plan.weeks && Array.isArray(plan.weeks)) {
                 plan.weeks.forEach(week => {
@@ -3149,6 +3162,14 @@ Critical rules:
             const [saving, setSaving] = useState(false);
             const [formError, setFormError] = useState('');
             const [createdCredentials, setCreatedCredentials] = useState(null);
+            const [showApiKeyHelp, setShowApiKeyHelp] = useState(false);
+            const [editingTrainer, setEditingTrainer] = useState(null);
+            const [editName, setEditName] = useState('');
+            const [editUsername, setEditUsername] = useState('');
+            const [editPassword, setEditPassword] = useState('');
+            const [editAllowedAI, setEditAllowedAI] = useState('groq_gemini');
+            const [editSaving, setEditSaving] = useState(false);
+            const [editError, setEditError] = useState('');
 
             useEffect(() => { loadTrainers(); }, []);
 
@@ -3258,6 +3279,66 @@ Critical rules:
                 }
             };
 
+            const openEditTrainer = (trainer) => {
+                setEditingTrainer(trainer);
+                setEditName(trainer.name);
+                setEditUsername(trainer.username);
+                setEditPassword('');
+                setEditAllowedAI(trainer.allowedAI || 'groq_gemini');
+                setEditError('');
+            };
+
+            const handleEditTrainer = async (e) => {
+                e.preventDefault();
+                setEditError('');
+                if (!editName.trim()) { setEditError('יש למלא שם'); return; }
+                setEditSaving(true);
+                try {
+                    const usernameChanged = editUsername.trim() !== editingTrainer.username;
+                    if (usernameChanged) {
+                        if (!editPassword.trim()) { setEditError('לשינוי שם משתמש נדרשת סיסמה חדשה'); setEditSaving(false); return; }
+                        if (editUsername.includes('@') || editUsername.includes(' ')) { setEditError('שם משתמש לא יכול לכלול @ או רווח'); setEditSaving(false); return; }
+                        // Create new Firebase Auth account with new username
+                        const apiKey = firebase.app().options.apiKey;
+                        const signUpRes = await fetch(
+                            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email: editUsername.trim() + TRAINER_EMAIL_SUFFIX, password: editPassword, returnSecureToken: true })
+                            }
+                        );
+                        const signUpData = await signUpRes.json();
+                        if (!signUpRes.ok) {
+                            const msg = signUpData.error?.message || '';
+                            if (msg === 'EMAIL_EXISTS') throw new Error('שם המשתמש כבר קיים במערכת');
+                            throw new Error(msg || 'שגיאה ביצירת חשבון');
+                        }
+                        const newUid = signUpData.localId;
+                        const newTrainerId = 'trainer_' + newUid;
+                        await db.collection('trainers').doc(newTrainerId).set({
+                            uid: newUid,
+                            name: editName.trim(),
+                            username: editUsername.trim(),
+                            allowedAI: editAllowedAI,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        await trainerStorage.deleteTrainer(editingTrainer.id);
+                        setCreatedCredentials({ name: editName.trim(), username: editUsername.trim(), password: editPassword, allowedAI: editAllowedAI });
+                    } else {
+                        // Only name or AI permissions changed — simple Firestore update
+                        await trainerStorage.updateTrainer(editingTrainer.id, { name: editName.trim(), allowedAI: editAllowedAI });
+                    }
+                    setEditingTrainer(null);
+                    await loadTrainers();
+                } catch (err) {
+                    setEditError('שגיאה: ' + err.message);
+                } finally {
+                    setEditSaving(false);
+                }
+            };
+
             return (
                 <div className="min-h-screen bg-gray-50">
                     <div className="gradient-bg text-white p-6 shadow-lg">
@@ -3265,12 +3346,66 @@ Critical rules:
                             <button onClick={onBack} className="mb-4 text-white hover:text-purple-100 font-semibold flex items-center gap-2">
                                 ← חזרה לדשבורד
                             </button>
-                            <h1 className="text-2xl font-bold">👨‍💼 ניהול מאמנים</h1>
-                            <p className="text-purple-100 mt-1">הוסף מאמנים ונהל את הרשאות ה-AI שלהם</p>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold">👨‍💼 ניהול מאמנים</h1>
+                                    <p className="text-purple-100 mt-1">הוסף מאמנים ונהל את הרשאות ה-AI שלהם</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowApiKeyHelp(!showApiKeyHelp)}
+                                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-xl font-semibold transition flex items-center gap-2 text-sm"
+                                >
+                                    🔑 איך מקבלים מפתח API?
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <div className="max-w-4xl mx-auto p-6">
+                        {showApiKeyHelp && (
+                            <div className="bg-blue-50 border-2 border-blue-300 rounded-2xl p-6 mb-6" dir="rtl">
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="text-lg font-bold text-blue-900">🔑 איך מקבלים מפתח API ומזינים אותו במערכת?</h3>
+                                    <button onClick={() => setShowApiKeyHelp(false)} className="text-blue-500 hover:text-blue-700 text-xl font-bold">✕</button>
+                                </div>
+                                <div className="space-y-5 text-sm text-blue-900">
+                                    <div className="bg-white rounded-xl p-4 border border-blue-200">
+                                        <div className="font-bold text-green-700 mb-2">✨ Gemini (Google) — חינמי, מומלץ</div>
+                                        <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                                            <li>היכנס לאתר: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">aistudio.google.com/apikey</a></li>
+                                            <li>התחבר עם חשבון Google</li>
+                                            <li>לחץ על "Create API Key"</li>
+                                            <li>העתק את המפתח שנוצר</li>
+                                            <li>בדשבורד: לחץ "הגדרות" ← הדבק את המפתח בשדה "מפתח Gemini API"</li>
+                                        </ol>
+                                        <div className="mt-2 text-xs text-gray-500">⚠️ המגבלה החינמית: 1,500 בקשות ביום, 15 בקשות לדקה</div>
+                                    </div>
+                                    <div className="bg-white rounded-xl p-4 border border-blue-200">
+                                        <div className="font-bold text-amber-700 mb-2">⚡ Groq — חינמי לחלוטין, מהיר מאוד</div>
+                                        <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                                            <li>היכנס לאתר: <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">console.groq.com/keys</a></li>
+                                            <li>צור חשבון חינמי (אין צורך בכרטיס אשראי)</li>
+                                            <li>לחץ "Create API Key"</li>
+                                            <li>העתק את המפתח</li>
+                                            <li>בדשבורד: לחץ "הגדרות" ← הדבק בשדה "מפתח Groq API"</li>
+                                        </ol>
+                                    </div>
+                                    <div className="bg-white rounded-xl p-4 border border-blue-200">
+                                        <div className="font-bold text-indigo-700 mb-2">🤖 Claude (Anthropic) — בתשלום</div>
+                                        <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                                            <li>היכנס לאתר: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">console.anthropic.com</a></li>
+                                            <li>צור חשבון ושים כרטיס אשראי</li>
+                                            <li>לחץ "Create Key"</li>
+                                            <li>העתק את המפתח</li>
+                                            <li>בדשבורד: לחץ "הגדרות" ← הדבק בשדה "מפתח Claude API"</li>
+                                        </ol>
+                                    </div>
+                                    <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-3 text-xs text-yellow-800">
+                                        💡 <strong>חשוב:</strong> המפתחות נשמרים רק בדפדפן שלך (localStorage) ולא נשלחים לשרת. כל מאמן שמזין את המפתח שלו בהגדרות יוכל להשתמש ביצירת תוכניות עם AI.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {createdCredentials && (
                             <div className="bg-green-50 border-2 border-green-400 rounded-2xl p-6 mb-6" dir="rtl">
                                 <h3 className="text-lg font-bold text-green-800 mb-3">✅ מאמן נוצר בהצלחה!</h3>
@@ -3329,14 +3464,82 @@ Critical rules:
                                                 )}
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={() => handleDeleteTrainer(trainer)}
-                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition text-sm font-medium"
-                                        >
-                                            מחק
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => openEditTrainer(trainer)}
+                                                className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-lg transition text-sm font-medium"
+                                            >
+                                                ✏️ ערוך
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteTrainer(trainer)}
+                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition text-sm font-medium"
+                                            >
+                                                מחק
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+
+                        {editingTrainer && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full" dir="rtl">
+                                    <h2 className="text-xl font-bold text-gray-800 mb-6">עריכת מאמן: {editingTrainer.name}</h2>
+                                    <form onSubmit={handleEditTrainer} className="space-y-4">
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-1">שם מלא</label>
+                                            <input type="text" value={editName} onChange={e => setEditName(e.target.value)} required
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-1">שם משתמש (לכניסה)</label>
+                                            <input type="text" value={editUsername}
+                                                onChange={e => setEditUsername(e.target.value.toLowerCase().replace(/[@ ]/g, ''))}
+                                                required dir="ltr"
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono" />
+                                            {editUsername !== editingTrainer.username && (
+                                                <p className="text-xs text-orange-600 mt-1">⚠️ שינוי שם המשתמש ידרוש יצירת חשבון חדש וסיסמה חדשה</p>
+                                            )}
+                                        </div>
+                                        {editUsername !== editingTrainer.username && (
+                                            <div>
+                                                <label className="block text-gray-700 font-semibold mb-1">סיסמה חדשה (נדרשת לשינוי שם משתמש)</label>
+                                                <input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)}
+                                                    dir="ltr" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono" />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-2">הרשאות AI</label>
+                                            <div className="space-y-2">
+                                                {[
+                                                    { value: 'groq', label: '⚡ Groq בלבד', color: '#d97706' },
+                                                    { value: 'groq_gemini', label: '⚡✨ Groq + Gemini', color: '#16a34a' },
+                                                    { value: 'all', label: '🤖 Groq + Gemini + Claude', color: '#4f46e5' }
+                                                ].map(opt => (
+                                                    <label key={opt.value} className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer hover:bg-gray-50"
+                                                        style={{borderColor: editAllowedAI === opt.value ? opt.color : '#e5e7eb'}}>
+                                                        <input type="radio" name="editAllowedAI" value={opt.value}
+                                                            checked={editAllowedAI === opt.value} onChange={() => setEditAllowedAI(opt.value)} />
+                                                        <span className="font-semibold">{opt.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {editError && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">{editError}</div>}
+                                        <div className="flex gap-3 pt-2">
+                                            <button type="submit" disabled={editSaving}
+                                                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition">
+                                                {editSaving ? 'שומר...' : 'שמור שינויים'}
+                                            </button>
+                                            <button type="button" onClick={() => { setEditingTrainer(null); setEditError(''); }}
+                                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition">
+                                                ביטול
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
                             </div>
                         )}
 
@@ -3472,6 +3675,12 @@ Critical rules:
                         const trainerDoc = await trainerStorage.getTrainerByUid(user.uid);
                         if (trainerDoc) {
                             setTrainerUser(trainerDoc);
+                        } else if (user.email && user.email.endsWith(TRAINER_EMAIL_SUFFIX)) {
+                            // Orphaned trainer account (no Firestore doc) — sign out immediately
+                            await auth.signOut();
+                            setTrainerUser(null);
+                            setAuthUser(null);
+                            return;
                         } else {
                             setTrainerUser(null); // admin
                         }
@@ -5364,6 +5573,7 @@ Rules:
         function EditTraineePlan({ trainee, onBack, onComplete }) {
             const { allowedAI } = React.useContext(TrainerContext);
             const [currentPlan, setCurrentPlan] = useState(trainee.workoutPlan);
+            const [traineeName, setTraineeName] = useState(trainee.name || '');
             const [saving, setSaving] = useState(false);
             const [aiLoading, setAiLoading] = useState(false);
             const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
@@ -5373,7 +5583,11 @@ Rules:
             const handleSavePlan = async () => {
                 setSaving(true);
                 try {
-                    await storage.updateTrainee(trainee.id, { workoutPlan: currentPlan });
+                    const updates = { workoutPlan: currentPlan };
+                    if (traineeName.trim() && traineeName.trim() !== trainee.name) {
+                        updates.name = traineeName.trim();
+                    }
+                    await storage.updateTrainee(trainee.id, updates);
                     onComplete();
                 } catch (error) {
                     console.error('Error updating plan:', error);
@@ -5453,7 +5667,7 @@ Rules:
 
             return (
                 <PlanPreviewEditor
-                    formData={trainee}
+                    formData={{ ...trainee, name: traineeName }}
                     workoutPlan={currentPlan}
                     onBack={onBack}
                     onSave={handleSavePlan}
@@ -5465,12 +5679,14 @@ Rules:
                     onUpdatePlan={setCurrentPlan}
                     isEditMode={true}
                     saving={saving}
+                    editableName={traineeName}
+                    onNameChange={setTraineeName}
                 />
             );
         }
 
         // Plan Preview and Editor
-        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onAiRegenerate, onAiRegenerateGemini, onAiRegenerateGroq, aiRegenerateLoading, onUpdatePlan, isEditMode, saving }) {
+        function PlanPreviewEditor({ formData, workoutPlan, onBack, onSave, onRegenerate, onAiRegenerate, onAiRegenerateGemini, onAiRegenerateGroq, aiRegenerateLoading, onUpdatePlan, isEditMode, saving, editableName, onNameChange }) {
             const { allowedAI } = React.useContext(TrainerContext);
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [editingExercise, setEditingExercise] = useState(null);
@@ -5486,41 +5702,81 @@ Rules:
             const handleDownloadPDF = () => {
                 const traineeGoals = (formData.goals || []).join(', ') || '';
                 const traineeEquipment = (formData.availableEquipment || []).join(', ') || '';
-                const printWindow = window.open('', '_blank');
-                if (!printWindow) { alert('אנא אפשר חלונות קופצים להורדת PDF'); return; }
-                const rows = workoutPlan.weeks.map(week => {
-                    const workoutCells = week.workouts.map(wo => {
-                        const exLines = (wo.exercises || [])
-                            .filter(ex => !ex.name.includes('חימום') && !ex.name.includes('מתיחות'))
-                            .map(ex => `<tr><td style="padding:0 2px;font-size:6.5pt;color:#333">${ex.name}</td><td style="padding:0 2px;font-size:6.5pt;text-align:center;white-space:nowrap">${ex.sets ? ex.sets+'×' : ''}${ex.reps || ex.duration || ''}</td></tr>`).join('');
-                        return `<td style="vertical-align:top;padding:2px 3px;border:1px solid #ccc;width:${Math.floor(85/week.workouts.length)}%">
-                            <div style="font-size:7pt;font-weight:bold;color:#4f46e5;margin-bottom:1px">${wo.day} — ${wo.type}</div>
-                            <table style="width:100%;border-collapse:collapse">${exLines}</table>
-                        </td>`;
+                const traineeName = editableName !== undefined ? editableName : (formData.name || '');
+
+                const weeksHtml = workoutPlan.weeks.map(week => {
+                    const workoutsHtml = week.workouts.map(wo => {
+                        const exercisesHtml = (wo.exercises || []).map(ex => {
+                            const details = [];
+                            if (ex.sets && ex.reps) details.push(`${ex.sets} סטים × ${ex.reps} חזרות`);
+                            else if (ex.sets && ex.duration) details.push(`${ex.sets} סטים × ${ex.duration}`);
+                            else if (ex.duration) details.push(`משך: ${ex.duration}`);
+                            if (ex.rest) details.push(`מנוחה: ${ex.rest} שנ'`);
+                            if (ex.intensity) details.push(`עצימות: ${ex.intensity}`);
+                            if (ex.pace) details.push(`קצב: ${ex.pace}`);
+                            if (ex.recommendedWeight) details.push(`משקל מומלץ: ${ex.recommendedWeight}`);
+                            if (ex.warmup) details.push(`חימום: ${ex.warmup}`);
+                            if (ex.main) details.push(`עיקרי: ${ex.main}`);
+                            if (ex.structure) details.push(`מבנה: ${ex.structure}`);
+                            const notes = [ex.notes, ex.tips, ex.weightNote].filter(Boolean).join(' | ');
+                            return `<div style="margin-bottom:6px;padding:4px 6px;background:#f8f8ff;border-right:3px solid #7c3aed;border-radius:3px">
+                                <div style="font-weight:bold;font-size:8pt;color:#1e1b4b">${ex.name}</div>
+                                ${details.length ? `<div style="font-size:7pt;color:#374151;margin-top:2px">${details.join(' | ')}</div>` : ''}
+                                ${notes ? `<div style="font-size:7pt;color:#7c3aed;margin-top:2px;font-style:italic">${notes}</div>` : ''}
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-bottom:10px;border:1px solid #c4b5fd;border-radius:6px;overflow:hidden">
+                            <div style="background:#7c3aed;color:white;padding:4px 8px;font-weight:bold;font-size:8pt">
+                                ${wo.day} — אימון ${wo.type}${wo.completed ? ' ✓' : ''}
+                            </div>
+                            <div style="padding:6px 8px">${exercisesHtml}</div>
+                        </div>`;
                     }).join('');
-                    return `<tr>
-                        <td style="padding:2px 4px;border:1px solid #ccc;font-size:7pt;font-weight:bold;white-space:nowrap;background:#f5f5ff;width:6%">שבוע ${week.weekNumber}<br><span style="font-weight:normal;color:#666;font-size:6pt">${week.phase||''}</span></td>
-                        ${workoutCells}
-                    </tr>`;
+                    return `<div style="margin-bottom:16px;page-break-inside:avoid">
+                        <div style="background:#ede9fe;border:1px solid #c4b5fd;border-radius:8px;padding:6px 10px;margin-bottom:6px">
+                            <span style="font-weight:bold;font-size:10pt;color:#4c1d95">שבוע ${week.weekNumber}</span>
+                            ${week.phase ? `<span style="font-size:8pt;color:#6d28d9;margin-right:8px"> — ${week.phase}</span>` : ''}
+                        </div>
+                        ${workoutsHtml}
+                    </div>`;
                 }).join('');
-                const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>תוכנית אימונים — ${formData.name||''}</title>
-                <style>
-                  @page { size: A4; margin: 8mm; }
-                  * { box-sizing: border-box; font-family: Arial, sans-serif; }
-                  body { margin: 0; padding: 0; font-size: 7pt; }
-                  h1 { font-size: 11pt; margin: 0 0 2px; }
-                  .meta { font-size: 7pt; color: #555; margin-bottom: 4px; }
-                  table.plan { width: 100%; border-collapse: collapse; }
-                  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-                </style></head><body>
-                <h1>תוכנית אימונים — ${formData.name||''}</h1>
-                <div class="meta">${formData.age ? 'גיל: '+formData.age+' | ' : ''}${formData.activityLevel ? 'רמה: '+formData.activityLevel+' | ' : ''}${traineeGoals ? 'מטרות: '+traineeGoals+' | ' : ''}${traineeEquipment ? 'ציוד: '+traineeEquipment : ''}</div>
-                <div class="meta">משך התוכנית: ${workoutPlan.duration||''} שבועות | ${workoutPlan.workoutsPerWeek||''} אימונים/שבוע | ${workoutPlan.workoutDuration||''} דקות/אימון</div>
-                <table class="plan"><tbody>${rows}</tbody></table>
-                <script>window.onload=function(){window.print();}<\/script>
-                </body></html>`;
-                printWindow.document.write(html);
-                printWindow.document.close();
+
+                const container = document.createElement('div');
+                container.style.cssText = 'font-family:Arial,sans-serif;direction:rtl;padding:16px;color:#111';
+                container.innerHTML = `
+                    <div style="text-align:center;margin-bottom:16px;border-bottom:2px solid #7c3aed;padding-bottom:10px">
+                        <h1 style="font-size:18pt;color:#4c1d95;margin:0 0 4px">תוכנית אימונים — ${traineeName}</h1>
+                        <div style="font-size:9pt;color:#555">
+                            ${formData.age ? 'גיל: '+formData.age+' | ' : ''}${formData.gender ? 'מין: '+formData.gender+' | ' : ''}${formData.activityLevel ? 'רמה: '+formData.activityLevel : ''}
+                        </div>
+                        ${traineeGoals ? `<div style="font-size:9pt;color:#555">מטרות: ${traineeGoals}</div>` : ''}
+                        ${traineeEquipment ? `<div style="font-size:9pt;color:#555">ציוד: ${traineeEquipment}</div>` : ''}
+                        <div style="font-size:9pt;color:#555;margin-top:4px">
+                            משך: ${workoutPlan.duration||''} שבועות | ${workoutPlan.workoutsPerWeek||''} אימונים/שבוע | ${workoutPlan.workoutDuration||''} דקות/אימון
+                        </div>
+                    </div>
+                    ${weeksHtml}
+                `;
+                document.body.appendChild(container);
+
+                const opt = {
+                    margin: [8, 6, 8, 6],
+                    filename: `תוכנית-אימונים-${traineeName || 'מתאמן'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                };
+
+                if (typeof html2pdf === 'undefined') {
+                    document.body.removeChild(container);
+                    alert('ספריית ה-PDF לא נטענה. אנא רענן את הדף ונסה שוב.');
+                    return;
+                }
+
+                html2pdf().set(opt).from(container).save().then(() => {
+                    document.body.removeChild(container);
+                });
             };
 
             const handleExerciseEdit = (weekIndex, workoutIndex, exerciseIndex, field, value) => {
@@ -5700,6 +5956,13 @@ Rules:
                                     🔄 צור מחדש (אלגוריתם)
                                 </button>
                                 <button
+                                    onClick={handleDownloadPDF}
+                                    className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+                                    title="הורד תוכנית כקובץ PDF"
+                                >
+                                    📥 הורד PDF
+                                </button>
+                                <button
                                     onClick={onSave}
                                     disabled={saving || aiRegenerateLoading}
                                     className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition shadow-lg disabled:opacity-60"
@@ -5749,6 +6012,18 @@ Rules:
                             {/* Trainee Summary */}
                             <div className="bg-purple-50 rounded-lg p-4 mb-6">
                                 <h3 className="font-bold text-purple-900 mb-2">סיכום מתאמן</h3>
+                                {isEditMode && onNameChange && (
+                                    <div className="mb-3">
+                                        <label className="block text-purple-800 font-semibold text-sm mb-1">שם המתאמן</label>
+                                        <input
+                                            type="text"
+                                            value={editableName !== undefined ? editableName : formData.name}
+                                            onChange={e => onNameChange(e.target.value)}
+                                            className="px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-400 bg-white text-gray-800 font-medium w-full max-w-xs"
+                                            dir="rtl"
+                                        />
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                                     <div><strong>גיל:</strong> {formData.age}</div>
                                     <div><strong>מין:</strong> {formData.gender}</div>
@@ -6417,6 +6692,75 @@ Rules:
             const [websiteUrl, setWebsiteUrl] = useState('');
             const [showUrlInput, setShowUrlInput] = useState(false);
 
+            const handleDownloadPDF = () => {
+                if (typeof html2pdf === 'undefined') { alert('ספריית ה-PDF לא נטענה. אנא רענן את הדף.'); return; }
+                const plan = trainee.workoutPlan;
+                const weeksHtml = plan.weeks.map(week => {
+                    const workoutsHtml = week.workouts.map(wo => {
+                        const exercisesHtml = (wo.exercises || []).map(ex => {
+                            const details = [];
+                            if (ex.sets && ex.reps) details.push(`${ex.sets} סטים × ${ex.reps} חזרות`);
+                            else if (ex.sets && ex.duration) details.push(`${ex.sets} סטים × ${ex.duration}`);
+                            else if (ex.duration) details.push(`משך: ${ex.duration}`);
+                            if (ex.rest) details.push(`מנוחה: ${ex.rest} שנ'`);
+                            if (ex.intensity) details.push(`עצימות: ${ex.intensity}`);
+                            if (ex.pace) details.push(`קצב: ${ex.pace}`);
+                            if (ex.recommendedWeight) details.push(`משקל מומלץ: ${ex.recommendedWeight}`);
+                            if (ex.warmup) details.push(`חימום: ${ex.warmup}`);
+                            if (ex.main) details.push(`עיקרי: ${ex.main}`);
+                            if (ex.structure) details.push(`מבנה: ${ex.structure}`);
+                            const notes = [ex.notes, ex.tips, ex.weightNote].filter(Boolean).join(' | ');
+                            return `<div style="margin-bottom:6px;padding:4px 6px;background:#f8f8ff;border-right:3px solid #7c3aed;border-radius:3px">
+                                <div style="font-weight:bold;font-size:8pt;color:#1e1b4b">${ex.name}</div>
+                                ${details.length ? `<div style="font-size:7pt;color:#374151;margin-top:2px">${details.join(' | ')}</div>` : ''}
+                                ${notes ? `<div style="font-size:7pt;color:#7c3aed;margin-top:2px;font-style:italic">${notes}</div>` : ''}
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-bottom:10px;border:1px solid #c4b5fd;border-radius:6px;overflow:hidden">
+                            <div style="background:#7c3aed;color:white;padding:4px 8px;font-weight:bold;font-size:8pt">
+                                ${wo.day} — אימון ${wo.type}${wo.completed ? ' ✓' : ''}
+                            </div>
+                            <div style="padding:6px 8px">${exercisesHtml}</div>
+                        </div>`;
+                    }).join('');
+                    return `<div style="margin-bottom:16px;page-break-inside:avoid">
+                        <div style="background:#ede9fe;border:1px solid #c4b5fd;border-radius:8px;padding:6px 10px;margin-bottom:6px">
+                            <span style="font-weight:bold;font-size:10pt;color:#4c1d95">שבוע ${week.weekNumber}</span>
+                            ${week.phase ? `<span style="font-size:8pt;color:#6d28d9;margin-right:8px"> — ${week.phase}</span>` : ''}
+                        </div>
+                        ${workoutsHtml}
+                    </div>`;
+                }).join('');
+
+                const goals = (trainee.goals || []).join(', ');
+                const equipment = (trainee.availableEquipment || []).join(', ');
+                const container = document.createElement('div');
+                container.style.cssText = 'font-family:Arial,sans-serif;direction:rtl;padding:16px;color:#111';
+                container.innerHTML = `
+                    <div style="text-align:center;margin-bottom:16px;border-bottom:2px solid #7c3aed;padding-bottom:10px">
+                        <h1 style="font-size:18pt;color:#4c1d95;margin:0 0 4px">תוכנית אימונים — ${trainee.name}</h1>
+                        <div style="font-size:9pt;color:#555">
+                            ${trainee.age ? 'גיל: '+trainee.age+' | ' : ''}${trainee.gender ? 'מין: '+trainee.gender+' | ' : ''}${trainee.activityLevel ? 'רמה: '+trainee.activityLevel : ''}
+                        </div>
+                        ${goals ? `<div style="font-size:9pt;color:#555">מטרות: ${goals}</div>` : ''}
+                        ${equipment ? `<div style="font-size:9pt;color:#555">ציוד: ${equipment}</div>` : ''}
+                        <div style="font-size:9pt;color:#555;margin-top:4px">
+                            משך: ${plan.duration||''} שבועות | ${plan.workoutsPerWeek||''} אימונים/שבוע | ${plan.workoutDuration||''} דקות/אימון
+                        </div>
+                    </div>
+                    ${weeksHtml}
+                `;
+                document.body.appendChild(container);
+                html2pdf().set({
+                    margin: [8, 6, 8, 6],
+                    filename: `תוכנית-אימונים-${trainee.name || 'מתאמן'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                }).from(container).save().then(() => { document.body.removeChild(container); });
+            };
+
             // Load saved website URL from localStorage on mount
             useEffect(() => {
                 const savedUrl = localStorage.getItem('trainerWebsiteUrl');
@@ -6528,6 +6872,14 @@ ${traineeLink}
                                             תוכנית המשך
                                         </button>
                                     )}
+                                    <button
+                                        onClick={handleDownloadPDF}
+                                        className="bg-gray-800 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-900 transition flex items-center gap-2"
+                                        title="הורד תוכנית מלאה כ-PDF"
+                                    >
+                                        <span>📥</span>
+                                        הורד PDF
+                                    </button>
                                     <button
                                         onClick={() => setShowShareModal(true)}
                                         className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition flex items-center gap-2"
