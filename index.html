@@ -1057,14 +1057,14 @@ Generate the complete plan now as JSON only.`;
                 return 'חרגת מהמכסה היומית של Gemini. נסה שוב מחר, או עדכן את תוכנית ה-API שלך ב-aistudio.google.com.';
             }
             const detail = errMsg ? `\nפירוט מ-Gemini: "${errMsg}"` : '';
-            return `חריגה ממכסת ה-API של Gemini — ייתכן שחרגת מהמכסה היומית (1,500 בקשות ביום לגרסה החינמית). המערכת ניסתה אוטומטית את כל הדגמים הזמינים.\n\nכדי לפתור: בדוק את השימוש שלך ב-aistudio.google.com — אם המכסה מוצתה, נסה שוב מחר, או עדכן לחשבון בתשלום.${detail}`;
+            return `חריגה ממכסת ה-API של Gemini — ייתכן שחרגת מהמכסה היומית (250–1,000 בקשות ביום לגרסה החינמית, תלוי בדגם). המערכת ניסתה אוטומטית את כל הדגמים הזמינים.\n\nכדי לפתור: בדוק את השימוש שלך ב-aistudio.google.com — אם המכסה מוצתה, נסה שוב מחר, או עדכן לחשבון בתשלום.${detail}`;
         };
 
         // Gemini AI plan generation with retry and model fallback
         const generatePlanWithGemini = async (formData, apiKey, options = {}) => {
             const systemPrompt = getTrainingSystemPrompt();
             const userMessage = buildTrainingUserMessage(formData, options);
-            const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite'];
+            const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
             let lastError = null;
 
             for (const model of models) {
@@ -1403,7 +1403,7 @@ Critical rules:
 
             const userMessage = `${traineeSummary}\n\nExisting plan:\n${JSON.stringify(strippedPlan)}\n\nApply ONLY this change: ${changeRequest}\n\nReturn the complete modified plan as JSON only.`;
 
-            const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite'];
+            const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
             let rawText = '';
             let lastEditError = null;
             let gotResponse = false;
@@ -3396,7 +3396,7 @@ Critical rules:
                                             <li>העתק את המפתח שנוצר</li>
                                             <li>בדשבורד: לחץ "הגדרות" ← הדבק את המפתח בשדה "מפתח Gemini API"</li>
                                         </ol>
-                                        <div className="mt-2 text-xs text-gray-500">⚠️ המגבלה החינמית: 1,500 בקשות ביום, 15 בקשות לדקה</div>
+                                        <div className="mt-2 text-xs text-gray-500">⚠️ המגבלה החינמית: 250–1,000 בקשות ביום, 10–15 בקשות לדקה</div>
                                     </div>
                                     <div className="bg-white rounded-xl p-4 border border-blue-200">
                                         <div className="font-bold text-amber-700 mb-2">⚡ Groq — חינמי לחלוטין, מהיר מאוד</div>
@@ -4248,7 +4248,7 @@ Critical rules:
                                                     <li>העתק את המפתח שנוצר</li>
                                                     <li>הדבק בשדה "מפתח Gemini API" למטה</li>
                                                 </ol>
-                                                <div className="mt-2 text-xs text-gray-500">⚠️ המגבלה החינמית: 1,500 בקשות ביום, 15 בקשות לדקה</div>
+                                                <div className="mt-2 text-xs text-gray-500">⚠️ המגבלה החינמית: 250–1,000 בקשות ביום, 10–15 בקשות לדקה</div>
                                             </div>
                                             <div className="bg-white rounded-xl p-4 border border-blue-200">
                                                 <div className="font-bold text-amber-700 mb-2">⚡ Groq — חינמי לחלוטין, מהיר מאוד</div>
@@ -4303,7 +4303,7 @@ Critical rules:
                                         מפתח API של Gemini (Google) — <span className="text-green-600 font-bold">חינמי</span>
                                     </label>
                                     <p className="text-sm text-gray-500 mb-3">
-                                        יצירת תוכניות עם Gemini AI הינה <strong>חינמית</strong> עד 1,500 בקשות ביום.
+                                        יצירת תוכניות עם Gemini AI הינה <strong>חינמית</strong> עד 1,000 בקשות ביום (דגם Flash-Lite) או 250 ביום (דגם Flash).
                                         קבל מפתח API חינמי בכתובת: <code className="bg-gray-100 px-1 rounded">aistudio.google.com/apikey</code>
                                     </p>
                                     <input
