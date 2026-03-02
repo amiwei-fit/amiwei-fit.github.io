@@ -66,7 +66,13 @@
         const storage = {
             getTrainees: async (trainerUid) => {
                 try {
-                    const snapshot = await db.collection('trainees').orderBy('createdAt', 'desc').get();
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Firestore timeout')), 12000)
+                    );
+                    const snapshot = await Promise.race([
+                        db.collection('trainees').orderBy('createdAt', 'desc').get(),
+                        timeoutPromise
+                    ]);
                     return snapshot.docs
                         .filter(doc => {
                             const data = doc.data();
@@ -3835,9 +3841,15 @@ Critical rules:
 
             const loadTrainees = async () => {
                 setLoading(true);
-                const data = await storage.getTrainees(trainerUser?.uid);
-                setTrainees(data);
-                setLoading(false);
+                try {
+                    const data = await storage.getTrainees(trainerUser?.uid);
+                    setTrainees(data);
+                } catch (error) {
+                    console.error('loadTrainees failed:', error);
+                    setTrainees([]);
+                } finally {
+                    setLoading(false);
+                }
             };
 
             const refreshTrainees = async () => {
