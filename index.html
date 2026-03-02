@@ -64,11 +64,18 @@
 
         // Storage functions
         const storage = {
-            getTrainees: async () => {
+            getTrainees: async (trainerUid) => {
                 try {
                     const snapshot = await db.collection('trainees').orderBy('createdAt', 'desc').get();
                     return snapshot.docs
-                        .filter(doc => !doc.data().isTrainer)
+                        .filter(doc => {
+                            const data = doc.data();
+                            if (data.isTrainer) return false;
+                            // Sub-trainer: only show their own trainees
+                            if (trainerUid) return data.trainerId === trainerUid;
+                            // Admin: show all trainees
+                            return true;
+                        })
                         .map(doc => ({ id: doc.id, ...doc.data() }));
                 } catch (error) {
                     console.error('Error getting trainees:', error);
@@ -3827,7 +3834,7 @@ Critical rules:
 
             const loadTrainees = async () => {
                 setLoading(true);
-                const data = await storage.getTrainees();
+                const data = await storage.getTrainees(trainerUser?.uid);
                 setTrainees(data);
                 setLoading(false);
             };
@@ -4341,7 +4348,7 @@ Critical rules:
 
         // Create Trainee Plan Form
         function CreateTraineePlan({ onBack, onComplete, sourceTrainee, draftTrainee, trainees = [] }) {
-            const { allowedAI } = React.useContext(TrainerContext);
+            const { allowedAI, trainerUser } = React.useContext(TrainerContext);
             const [step, setStep] = useState('form'); // 'form' or 'preview'
             const [generatedPlan, setGeneratedPlan] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
@@ -4632,7 +4639,7 @@ Rules:
                     if (draftId) {
                         await storage.updateTrainee(id, { ...formData, isDraft: true, workoutPlan: null, savedAt: new Date().toISOString() });
                     } else {
-                        await storage.saveTrainee({ id, ...formData, isDraft: true, workoutPlan: null, savedAt: new Date().toISOString() });
+                        await storage.saveTrainee({ id, ...formData, isDraft: true, workoutPlan: null, savedAt: new Date().toISOString(), trainerId: trainerUser?.uid || null });
                         setDraftId(id);
                     }
                     setDraftSavedMsg('הטיוטה נשמרה ✓');
@@ -4650,7 +4657,7 @@ Rules:
                     if (draftId) {
                         await storage.updateTrainee(id, { ...formData, workoutPlan: generatedPlan, isDraft: false, savedAt: null });
                     } else {
-                        await storage.saveTrainee({ id, ...formData, workoutPlan: generatedPlan, isDraft: false });
+                        await storage.saveTrainee({ id, ...formData, workoutPlan: generatedPlan, isDraft: false, trainerId: trainerUser?.uid || null });
                     }
                     onComplete();
                 } catch (error) {
