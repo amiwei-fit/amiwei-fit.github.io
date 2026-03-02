@@ -18,6 +18,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <!-- PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Word generation -->
+    <script src="https://unpkg.com/html-docx-js/dist/html-docx.js"></script>
     
     <style>
         body {
@@ -5911,6 +5913,81 @@ Rules:
                 });
             };
 
+            const handleDownloadWord = () => {
+                if (typeof htmlDocx === 'undefined') {
+                    alert('ספריית Word לא נטענה. אנא רענן את הדף ונסה שוב.');
+                    return;
+                }
+                const traineeGoals = (formData.goals || []).join(', ') || '';
+                const traineeEquipment = (formData.availableEquipment || []).join(', ') || '';
+                const traineeName = editableName !== undefined ? editableName : (formData.name || '');
+
+                const weeksHtml = workoutPlan.weeks.map(week => {
+                    const workoutsHtml = week.workouts.map(wo => {
+                        const exercisesHtml = (wo.exercises || []).map(ex => {
+                            const details = [];
+                            if (ex.sets && ex.reps) details.push(`${ex.sets} סטים × ${ex.reps} חזרות`);
+                            else if (ex.sets && ex.duration) details.push(`${ex.sets} סטים × ${ex.duration}`);
+                            else if (ex.duration) details.push(`משך: ${ex.duration}`);
+                            if (ex.rest) details.push(`מנוחה: ${ex.rest} שנ'`);
+                            if (ex.intensity) details.push(`עצימות: ${ex.intensity}`);
+                            if (ex.pace) details.push(`קצב: ${ex.pace}`);
+                            if (ex.recommendedWeight) details.push(`משקל מומלץ: ${ex.recommendedWeight}`);
+                            if (ex.warmup) details.push(`חימום: ${ex.warmup}`);
+                            if (ex.main) details.push(`עיקרי: ${ex.main}`);
+                            if (ex.structure) details.push(`מבנה: ${ex.structure}`);
+                            const notes = [ex.notes, ex.tips, ex.weightNote].filter(Boolean).join(' | ');
+                            return `<div style="margin-bottom:6px;padding:6px 8px;background:#f8f8ff;border-right:3px solid #7c3aed;border-radius:3px">
+                                <p style="font-weight:bold;font-size:10pt;color:#1e1b4b;margin:0">${ex.name}</p>
+                                ${details.length ? `<p style="font-size:9pt;color:#374151;margin:2px 0 0">${details.join(' | ')}</p>` : ''}
+                                ${notes ? `<p style="font-size:9pt;color:#7c3aed;margin:2px 0 0;font-style:italic">${notes}</p>` : ''}
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-bottom:12px;border:1px solid #c4b5fd;border-radius:6px">
+                            <div style="background:#7c3aed;color:white;padding:6px 10px;font-weight:bold;font-size:10pt">
+                                ${wo.day} — אימון ${wo.type}${wo.completed ? ' ✓' : ''}
+                            </div>
+                            <div style="padding:8px 10px">${exercisesHtml}</div>
+                        </div>`;
+                    }).join('');
+                    return `<div style="margin-bottom:20px">
+                        <div style="background:#ede9fe;border:1px solid #c4b5fd;border-radius:8px;padding:8px 12px;margin-bottom:8px">
+                            <span style="font-weight:bold;font-size:12pt;color:#4c1d95">שבוע ${week.weekNumber}</span>
+                            ${week.phase ? `<span style="font-size:10pt;color:#6d28d9;margin-right:8px"> — ${week.phase}</span>` : ''}
+                        </div>
+                        ${workoutsHtml}
+                    </div>`;
+                }).join('');
+
+                const htmlContent = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" dir="rtl">
+<head><meta charset="UTF-8"><style>
+body { font-family: Arial, sans-serif; direction: rtl; }
+</style></head>
+<body style="font-family:Arial,sans-serif;direction:rtl;padding:20px;color:#111">
+    <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #7c3aed;padding-bottom:12px">
+        <h1 style="font-size:18pt;color:#4c1d95;margin:0 0 6px">תוכנית אימונים — ${traineeName}</h1>
+        <p style="font-size:10pt;color:#555;margin:0">
+            ${formData.age ? 'גיל: '+formData.age+' | ' : ''}${formData.gender ? 'מין: '+formData.gender+' | ' : ''}${formData.activityLevel ? 'רמה: '+formData.activityLevel : ''}
+        </p>
+        ${traineeGoals ? `<p style="font-size:10pt;color:#555;margin:4px 0 0">מטרות: ${traineeGoals}</p>` : ''}
+        ${traineeEquipment ? `<p style="font-size:10pt;color:#555;margin:4px 0 0">ציוד: ${traineeEquipment}</p>` : ''}
+        <p style="font-size:10pt;color:#555;margin:6px 0 0">משך: ${workoutPlan.duration||''} שבועות | ${workoutPlan.workoutsPerWeek||''} אימונים/שבוע | ${workoutPlan.workoutDuration||''} דקות/אימון</p>
+    </div>
+    ${weeksHtml}
+</body></html>`;
+
+                const blob = htmlDocx.asBlob(htmlContent);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `תוכנית-אימונים-${traineeName || 'מתאמן'}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
             const handleExerciseEdit = (weekIndex, workoutIndex, exerciseIndex, field, value) => {
                 const updatedPlan = { ...workoutPlan };
                 updatedPlan.weeks[weekIndex].workouts[workoutIndex].exercises[exerciseIndex][field] = value;
@@ -6093,6 +6170,13 @@ Rules:
                                     title="הורד תוכנית כקובץ PDF"
                                 >
                                     📥 הורד PDF
+                                </button>
+                                <button
+                                    onClick={handleDownloadWord}
+                                    className="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+                                    title="הורד תוכנית כקובץ Word"
+                                >
+                                    📝 הורד Word
                                 </button>
                                 <button
                                     onClick={onSave}
@@ -6314,6 +6398,14 @@ Rules:
                                 >
                                     <span>📄</span>
                                     הורד PDF
+                                </button>
+                                <button
+                                    onClick={handleDownloadWord}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-lg font-semibold transition shadow flex items-center gap-2"
+                                    title="הורד תוכנית כ-Word"
+                                >
+                                    <span>📝</span>
+                                    הורד Word
                                 </button>
                                 <button
                                     onClick={onSave}
@@ -6893,6 +6985,77 @@ Rules:
                 }).from(container).save().then(() => { document.body.removeChild(container); });
             };
 
+            const handleDownloadWord = () => {
+                if (typeof htmlDocx === 'undefined') { alert('ספריית Word לא נטענה. אנא רענן את הדף.'); return; }
+                const plan = trainee.workoutPlan;
+                const weeksHtml = plan.weeks.map(week => {
+                    const workoutsHtml = week.workouts.map(wo => {
+                        const exercisesHtml = (wo.exercises || []).map(ex => {
+                            const details = [];
+                            if (ex.sets && ex.reps) details.push(`${ex.sets} סטים × ${ex.reps} חזרות`);
+                            else if (ex.sets && ex.duration) details.push(`${ex.sets} סטים × ${ex.duration}`);
+                            else if (ex.duration) details.push(`משך: ${ex.duration}`);
+                            if (ex.rest) details.push(`מנוחה: ${ex.rest} שנ'`);
+                            if (ex.intensity) details.push(`עצימות: ${ex.intensity}`);
+                            if (ex.pace) details.push(`קצב: ${ex.pace}`);
+                            if (ex.recommendedWeight) details.push(`משקל מומלץ: ${ex.recommendedWeight}`);
+                            if (ex.warmup) details.push(`חימום: ${ex.warmup}`);
+                            if (ex.main) details.push(`עיקרי: ${ex.main}`);
+                            if (ex.structure) details.push(`מבנה: ${ex.structure}`);
+                            const notes = [ex.notes, ex.tips, ex.weightNote].filter(Boolean).join(' | ');
+                            return `<div style="margin-bottom:6px;padding:6px 8px;background:#f8f8ff;border-right:3px solid #7c3aed;border-radius:3px">
+                                <p style="font-weight:bold;font-size:10pt;color:#1e1b4b;margin:0">${ex.name}</p>
+                                ${details.length ? `<p style="font-size:9pt;color:#374151;margin:2px 0 0">${details.join(' | ')}</p>` : ''}
+                                ${notes ? `<p style="font-size:9pt;color:#7c3aed;margin:2px 0 0;font-style:italic">${notes}</p>` : ''}
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-bottom:12px;border:1px solid #c4b5fd;border-radius:6px">
+                            <div style="background:#7c3aed;color:white;padding:6px 10px;font-weight:bold;font-size:10pt">
+                                ${wo.day} — אימון ${wo.type}${wo.completed ? ' ✓' : ''}
+                            </div>
+                            <div style="padding:8px 10px">${exercisesHtml}</div>
+                        </div>`;
+                    }).join('');
+                    return `<div style="margin-bottom:20px">
+                        <div style="background:#ede9fe;border:1px solid #c4b5fd;border-radius:8px;padding:8px 12px;margin-bottom:8px">
+                            <span style="font-weight:bold;font-size:12pt;color:#4c1d95">שבוע ${week.weekNumber}</span>
+                            ${week.phase ? `<span style="font-size:10pt;color:#6d28d9;margin-right:8px"> — ${week.phase}</span>` : ''}
+                        </div>
+                        ${workoutsHtml}
+                    </div>`;
+                }).join('');
+
+                const goals = (trainee.goals || []).join(', ');
+                const equipment = (trainee.availableEquipment || []).join(', ');
+                const htmlContent = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" dir="rtl">
+<head><meta charset="UTF-8"><style>
+body { font-family: Arial, sans-serif; direction: rtl; }
+</style></head>
+<body style="font-family:Arial,sans-serif;direction:rtl;padding:20px;color:#111">
+    <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #7c3aed;padding-bottom:12px">
+        <h1 style="font-size:18pt;color:#4c1d95;margin:0 0 6px">תוכנית אימונים — ${trainee.name}</h1>
+        <p style="font-size:10pt;color:#555;margin:0">
+            ${trainee.age ? 'גיל: '+trainee.age+' | ' : ''}${trainee.gender ? 'מין: '+trainee.gender+' | ' : ''}${trainee.activityLevel ? 'רמה: '+trainee.activityLevel : ''}
+        </p>
+        ${goals ? `<p style="font-size:10pt;color:#555;margin:4px 0 0">מטרות: ${goals}</p>` : ''}
+        ${equipment ? `<p style="font-size:10pt;color:#555;margin:4px 0 0">ציוד: ${equipment}</p>` : ''}
+        <p style="font-size:10pt;color:#555;margin:6px 0 0">משך: ${plan.duration||''} שבועות | ${plan.workoutsPerWeek||''} אימונים/שבוע | ${plan.workoutDuration||''} דקות/אימון</p>
+    </div>
+    ${weeksHtml}
+</body></html>`;
+
+                const blob = htmlDocx.asBlob(htmlContent);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `תוכנית-אימונים-${trainee.name || 'מתאמן'}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
             // Load saved website URL from localStorage on mount
             useEffect(() => {
                 const savedUrl = localStorage.getItem('trainerWebsiteUrl');
@@ -7011,6 +7174,14 @@ ${traineeLink}
                                     >
                                         <span>📥</span>
                                         הורד PDF
+                                    </button>
+                                    <button
+                                        onClick={handleDownloadWord}
+                                        className="bg-indigo-800 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-900 transition flex items-center gap-2"
+                                        title="הורד תוכנית מלאה כ-Word"
+                                    >
+                                        <span>📝</span>
+                                        הורד Word
                                     </button>
                                     <button
                                         onClick={() => setShowShareModal(true)}
