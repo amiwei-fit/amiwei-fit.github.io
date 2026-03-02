@@ -67,7 +67,9 @@
             getTrainees: async () => {
                 try {
                     const snapshot = await db.collection('trainees').orderBy('createdAt', 'desc').get();
-                    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    return snapshot.docs
+                        .filter(doc => !doc.data().isTrainer)
+                        .map(doc => ({ id: doc.id, ...doc.data() }));
                 } catch (error) {
                     console.error('Error getting trainees:', error);
                     return [];
@@ -175,8 +177,15 @@
         const trainerStorage = {
             getTrainers: async () => {
                 try {
-                    const snapshot = await db.collection('trainers').orderBy('createdAt', 'desc').get();
-                    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Stored in 'trainees' collection with isTrainer:true to use deployed rules
+                    const snapshot = await db.collection('trainees').where('isTrainer', '==', true).get();
+                    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    docs.sort((a, b) => {
+                        const ta = a.createdAt?.toMillis?.() || 0;
+                        const tb = b.createdAt?.toMillis?.() || 0;
+                        return tb - ta;
+                    });
+                    return docs;
                 } catch (error) {
                     console.error('Error getting trainers:', error);
                     return [];
@@ -186,10 +195,11 @@
                 try {
                     const data = {
                         ...trainer,
+                        isTrainer: true,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
-                    await db.collection('trainers').doc(trainer.id).set(data);
+                    await db.collection('trainees').doc(trainer.id).set(data);
                     return trainer;
                 } catch (error) {
                     console.error('Error saving trainer:', error);
@@ -198,7 +208,7 @@
             },
             updateTrainer: async (trainerId, updates) => {
                 try {
-                    await db.collection('trainers').doc(trainerId).update({
+                    await db.collection('trainees').doc(trainerId).update({
                         ...updates,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
@@ -209,7 +219,7 @@
             },
             deleteTrainer: async (trainerId) => {
                 try {
-                    await db.collection('trainers').doc(trainerId).delete();
+                    await db.collection('trainees').doc(trainerId).delete();
                 } catch (error) {
                     console.error('Error deleting trainer:', error);
                     throw error;
@@ -217,7 +227,7 @@
             },
             getTrainerByUid: async (uid) => {
                 try {
-                    const snapshot = await db.collection('trainers').where('uid', '==', uid).get();
+                    const snapshot = await db.collection('trainees').where('uid', '==', uid).get();
                     if (!snapshot.empty) {
                         const doc = snapshot.docs[0];
                         return { id: doc.id, ...doc.data() };
@@ -3232,7 +3242,7 @@ Critical rules:
                                 throw Object.assign(new Error('Email already in use'), { code: 'auth/email-already-in-use' });
                             }
                             const orphanUid = signInData.localId;
-                            const existingDoc = await db.collection('trainers').doc('trainer_' + orphanUid).get();
+                            const existingDoc = await db.collection('trainees').doc('trainer_' + orphanUid).get();
                             if (existingDoc.exists) {
                                 // Firestore doc also exists — genuinely taken
                                 throw Object.assign(new Error('Email already in use'), { code: 'auth/email-already-in-use' });
@@ -3316,11 +3326,12 @@ Critical rules:
                         }
                         const newUid = signUpData.localId;
                         const newTrainerId = 'trainer_' + newUid;
-                        await db.collection('trainers').doc(newTrainerId).set({
+                        await db.collection('trainees').doc(newTrainerId).set({
                             uid: newUid,
                             name: editName.trim(),
                             username: editUsername.trim(),
                             allowedAI: editAllowedAI,
+                            isTrainer: true,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
