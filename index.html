@@ -3834,6 +3834,12 @@ Critical rules:
             const [settingsGroqKey, setSettingsGroqKey] = useState(() => localStorage.getItem('groqApiKey') || '');
             const [settingsTrainerContext, setSettingsTrainerContext] = useState(() => localStorage.getItem('trainerContext') || '');
             const [settingsProxyUrl, setSettingsProxyUrl] = useState(() => localStorage.getItem('anthropicProxyUrl') || '');
+            const [settingsCurrentPw, setSettingsCurrentPw] = useState('');
+            const [settingsNewPw, setSettingsNewPw] = useState('');
+            const [settingsConfirmPw, setSettingsConfirmPw] = useState('');
+            const [settingsPwError, setSettingsPwError] = useState('');
+            const [settingsPwSuccess, setSettingsPwSuccess] = useState('');
+            const [settingsPwLoading, setSettingsPwLoading] = useState(false);
             const [showGroupPrograms, setShowGroupPrograms] = useState(false);
             const [showApiKeyHelp, setShowApiKeyHelp] = useState(false);
 
@@ -3914,6 +3920,41 @@ Critical rules:
                 localStorage.setItem('trainerContext', settingsTrainerContext.trim());
                 localStorage.setItem('anthropicProxyUrl', settingsProxyUrl.trim());
                 setShowSettings(false);
+            };
+
+            const handleChangeTrainerPassword = async (e) => {
+                e.preventDefault();
+                setSettingsPwError('');
+                setSettingsPwSuccess('');
+                if (settingsNewPw !== settingsConfirmPw) {
+                    setSettingsPwError('הסיסמאות החדשות אינן תואמות');
+                    return;
+                }
+                if (settingsNewPw.length < 6) {
+                    setSettingsPwError('הסיסמה חייבת להכיל לפחות 6 תווים');
+                    return;
+                }
+                setSettingsPwLoading(true);
+                try {
+                    const user = auth.currentUser;
+                    const credential = firebase.auth.EmailAuthProvider.credential(user.email, settingsCurrentPw);
+                    await user.reauthenticateWithCredential(credential);
+                    await user.updatePassword(settingsNewPw);
+                    setSettingsPwSuccess('הסיסמה שונתה בהצלחה!');
+                    setSettingsCurrentPw('');
+                    setSettingsNewPw('');
+                    setSettingsConfirmPw('');
+                } catch (err) {
+                    if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+                        setSettingsPwError('הסיסמה הנוכחית שגויה');
+                    } else if (err.code === 'auth/weak-password') {
+                        setSettingsPwError('הסיסמה חלשה מדי — יש להשתמש ב-6 תווים לפחות');
+                    } else {
+                        setSettingsPwError('שגיאה בשינוי הסיסמה. נסה שוב.');
+                    }
+                } finally {
+                    setSettingsPwLoading(false);
+                }
             };
 
             if (loading) {
@@ -4454,6 +4495,61 @@ Critical rules:
                                     >
                                         ביטול
                                     </button>
+                                </div>
+
+                                <hr className="my-6 border-gray-200" />
+
+                                <div className="mb-2">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-1">🔒 שינוי סיסמה</h3>
+                                    <p className="text-sm text-gray-500 mb-4">שנה את הסיסמה שבה אתה מתחבר למערכת.</p>
+                                    <form onSubmit={handleChangeTrainerPassword} className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">סיסמה נוכחית</label>
+                                            <input
+                                                type="password"
+                                                value={settingsCurrentPw}
+                                                onChange={e => setSettingsCurrentPw(e.target.value)}
+                                                required
+                                                placeholder="הכנס סיסמה נוכחית"
+                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">סיסמה חדשה</label>
+                                            <input
+                                                type="password"
+                                                value={settingsNewPw}
+                                                onChange={e => setSettingsNewPw(e.target.value)}
+                                                required
+                                                placeholder="לפחות 6 תווים"
+                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">אימות סיסמה חדשה</label>
+                                            <input
+                                                type="password"
+                                                value={settingsConfirmPw}
+                                                onChange={e => setSettingsConfirmPw(e.target.value)}
+                                                required
+                                                placeholder="הכנס שוב את הסיסמה החדשה"
+                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                            />
+                                        </div>
+                                        {settingsPwError && (
+                                            <p className="text-sm text-red-600 font-medium">{settingsPwError}</p>
+                                        )}
+                                        {settingsPwSuccess && (
+                                            <p className="text-sm text-green-600 font-medium">{settingsPwSuccess}</p>
+                                        )}
+                                        <button
+                                            type="submit"
+                                            disabled={settingsPwLoading}
+                                            className="w-full bg-gray-800 hover:bg-gray-900 disabled:opacity-60 text-white font-semibold py-2.5 px-6 rounded-xl transition"
+                                        >
+                                            {settingsPwLoading ? '⏳ מעדכן...' : '🔒 עדכן סיסמה'}
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         </div>
