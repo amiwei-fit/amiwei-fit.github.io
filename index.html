@@ -7400,10 +7400,11 @@ ${traineeLink}
                                                 <h3 className="text-xl font-bold text-gray-800">
                                                     יום {workout.day} - אימון {workout.type}
                                                 </h3>
-                                                <div className="flex gap-2 mt-2">
+                                                <div className="flex gap-2 mt-2 flex-wrap">
                                                     {workout.completed && (
                                                         <span className="inline-block bg-green-100 text-green-800 text-sm px-3 py-1 rounded-full">
                                                             ✓ הושלם
+                                                            {workout.completedAt && ` — ${new Date(workout.completedAt).toLocaleDateString('he-IL')}`}
                                                         </span>
                                                     )}
                                                     {workout.feedback && workout.feedbackSentToTrainer && (
@@ -7793,9 +7794,11 @@ ${traineeLink}
 
             const handleWorkoutComplete = async (weekIndex, workoutIndex) => {
                 const updatedTrainee = { ...trainee };
-                updatedTrainee.workoutPlan.weeks[weekIndex].workouts[workoutIndex].completed = 
-                    !updatedTrainee.workoutPlan.weeks[weekIndex].workouts[workoutIndex].completed;
-                
+                const workout = updatedTrainee.workoutPlan.weeks[weekIndex].workouts[workoutIndex];
+                const nowCompleted = !workout.completed;
+                workout.completed = nowCompleted;
+                workout.completedAt = nowCompleted ? new Date().toISOString() : null;
+
                 const saved = await storage.updateTrainee(trainee.id, updatedTrainee);
                 if (saved) {
                     setTrainee(saved);
@@ -8416,7 +8419,9 @@ ${traineeLink}
                                             <h3 className="text-lg font-bold text-gray-800">{workout.day} — {workout.type}</h3>
                                             <div className="flex gap-2 mt-1 flex-wrap">
                                                 {workout.completed && (
-                                                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">✓ הושלם</span>
+                                                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                                        ✓ הושלם{workout.completedAt && ` — ${new Date(workout.completedAt).toLocaleDateString('he-IL')}`}
+                                                    </span>
                                                 )}
                                                 {workout.difficulty && (
                                                     <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">קושי: {workout.difficulty}</span>
@@ -8779,8 +8784,10 @@ ${traineeLink}
 
             const handleWorkoutComplete = async (weekIndex, workoutIndex) => {
                 const updated = JSON.parse(JSON.stringify(localMember));
-                updated.workoutPlan.weeks[weekIndex].workouts[workoutIndex].completed =
-                    !updated.workoutPlan.weeks[weekIndex].workouts[workoutIndex].completed;
+                const workout = updated.workoutPlan.weeks[weekIndex].workouts[workoutIndex];
+                const nowCompleted = !workout.completed;
+                workout.completed = nowCompleted;
+                workout.completedAt = nowCompleted ? new Date().toISOString() : null;
                 const saved = await groupStorage.updateGroupMember(localMember.id, { workoutPlan: updated.workoutPlan });
                 if (saved) {
                     setLocalMember(saved);
