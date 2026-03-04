@@ -7011,6 +7011,7 @@ body { font-family: Arial, sans-serif; direction: rtl; }
             const [emailBody, setEmailBody] = useState('');
             const [websiteUrl, setWebsiteUrl] = useState('');
             const [showUrlInput, setShowUrlInput] = useState(false);
+            const [replyDrafts, setReplyDrafts] = useState({});
 
             const handleDownloadPDF = () => {
                 if (typeof html2pdf === 'undefined') { alert('ספריית ה-PDF לא נטענה. אנא רענן את הדף.'); return; }
@@ -7225,6 +7226,22 @@ ${traineeLink}
                 const updatedTrainee = { ...trainee };
                 updatedTrainee.workoutPlan.weeks[weekIndex].workouts[workoutIndex].feedbackRead = true;
                 await storage.updateTrainee(trainee.id, updatedTrainee);
+            };
+
+            const sendTrainerReply = async (weekIndex, workoutIndex) => {
+                const key = `${weekIndex}-${workoutIndex}`;
+                const reply = (replyDrafts[key] || '').trim();
+                if (!reply) return;
+                const updatedTrainee = { ...trainee };
+                const workout = updatedTrainee.workoutPlan.weeks[weekIndex].workouts[workoutIndex];
+                workout.trainerReply = reply;
+                workout.trainerReplySentAt = new Date().toISOString();
+                workout.feedbackRead = true;
+                const saved = await storage.updateTrainee(trainee.id, updatedTrainee);
+                if (saved) {
+                    setTrainee(saved);
+                    setReplyDrafts(prev => ({ ...prev, [key]: '' }));
+                }
             };
 
             return (
@@ -7473,6 +7490,29 @@ ${traineeLink}
                                                         סמן כנקרא
                                                     </button>
                                                 )}
+                                            </div>
+                                            {workout.trainerReply && (
+                                                <div className="mt-3 pt-3 border-t border-blue-200">
+                                                    <div className="font-bold text-purple-900 mb-1">💬 תגובתך:</div>
+                                                    <div className="text-purple-700">{workout.trainerReply}</div>
+                                                    <div className="text-xs text-gray-400 mt-1">{new Date(workout.trainerReplySentAt).toLocaleDateString('he-IL')}</div>
+                                                </div>
+                                            )}
+                                            <div className="mt-3 pt-3 border-t border-blue-200 flex gap-2">
+                                                <textarea
+                                                    value={replyDrafts[`${selectedWeek}-${index}`] || ''}
+                                                    onChange={e => setReplyDrafts(prev => ({ ...prev, [`${selectedWeek}-${index}`]: e.target.value }))}
+                                                    placeholder={workout.trainerReply ? 'ערוך / החלף תגובה...' : 'כתוב תגובה למתאמן...'}
+                                                    rows={2}
+                                                    className="flex-1 border border-blue-300 rounded-lg p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                                />
+                                                <button
+                                                    onClick={() => sendTrainerReply(selectedWeek, index)}
+                                                    disabled={!(replyDrafts[`${selectedWeek}-${index}`] || '').trim()}
+                                                    className="self-end bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+                                                >
+                                                    שלח
+                                                </button>
                                             </div>
                                         </div>
                                     )}
@@ -8027,6 +8067,12 @@ ${traineeLink}
                                             {workout.feedbackSentToTrainer && (
                                                 <div className="text-green-600 text-sm mt-2">✓ נשלח למאמן</div>
                                             )}
+                                            {workout.trainerReply && (
+                                                <div className="mt-3 pt-3 border-t border-blue-200">
+                                                    <div className="font-semibold text-purple-900 mb-1">💬 תגובת המאמן:</div>
+                                                    <div className="text-purple-700">{workout.trainerReply}</div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -8326,6 +8372,7 @@ ${traineeLink}
         function GroupMemberTrainerView({ member, program, onBack }) {
             const [selectedWeek, setSelectedWeek] = useState(0);
             const [localMember, setLocalMember] = useState(member);
+            const [replyDrafts, setReplyDrafts] = useState({});
 
             if (!localMember.workoutPlan) {
                 return (
@@ -8350,6 +8397,22 @@ ${traineeLink}
                 updated.workoutPlan.weeks[weekIndex].workouts[workoutIndex].feedbackRead = true;
                 const saved = await groupStorage.updateGroupMember(localMember.id, { workoutPlan: updated.workoutPlan });
                 if (saved) setLocalMember(saved);
+            };
+
+            const sendTrainerReply = async (weekIndex, workoutIndex) => {
+                const key = `${weekIndex}-${workoutIndex}`;
+                const reply = (replyDrafts[key] || '').trim();
+                if (!reply) return;
+                const updated = JSON.parse(JSON.stringify(localMember));
+                const workout = updated.workoutPlan.weeks[weekIndex].workouts[workoutIndex];
+                workout.trainerReply = reply;
+                workout.trainerReplySentAt = new Date().toISOString();
+                workout.feedbackRead = true;
+                const saved = await groupStorage.updateGroupMember(localMember.id, { workoutPlan: updated.workoutPlan });
+                if (saved) {
+                    setLocalMember(saved);
+                    setReplyDrafts(prev => ({ ...prev, [key]: '' }));
+                }
             };
 
             return (
@@ -8444,6 +8507,29 @@ ${traineeLink}
                                                         סמן כנקרא
                                                     </button>
                                                 )}
+                                            </div>
+                                            {workout.trainerReply && (
+                                                <div className="mt-2 pt-2 border-t border-gray-200">
+                                                    <div className="text-xs font-bold text-purple-900 mb-0.5">💬 תגובתך:</div>
+                                                    <div className="text-xs text-purple-700">{workout.trainerReply}</div>
+                                                    <div className="text-xs text-gray-400 mt-0.5">{new Date(workout.trainerReplySentAt).toLocaleDateString('he-IL')}</div>
+                                                </div>
+                                            )}
+                                            <div className="mt-2 pt-2 border-t border-gray-200 flex gap-2">
+                                                <textarea
+                                                    value={replyDrafts[`${selectedWeek}-${index}`] || ''}
+                                                    onChange={e => setReplyDrafts(prev => ({ ...prev, [`${selectedWeek}-${index}`]: e.target.value }))}
+                                                    placeholder={workout.trainerReply ? 'ערוך / החלף תגובה...' : 'כתוב תגובה למתאמן...'}
+                                                    rows={2}
+                                                    className="flex-1 border border-gray-300 rounded-lg p-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                                />
+                                                <button
+                                                    onClick={() => sendTrainerReply(selectedWeek, index)}
+                                                    disabled={!(replyDrafts[`${selectedWeek}-${index}`] || '').trim()}
+                                                    className="self-end bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                                                >
+                                                    שלח
+                                                </button>
                                             </div>
                                         </div>
                                     )}
@@ -8931,6 +9017,12 @@ ${traineeLink}
                                             <div className="font-semibold text-blue-900 mb-1">הפידבק שלך:</div>
                                             <div className="text-blue-800">רמת קושי: {workout.difficulty}</div>
                                             {workout.feedback && <div className="text-blue-700 mt-1">{workout.feedback}</div>}
+                                            {workout.trainerReply && (
+                                                <div className="mt-3 pt-3 border-t border-blue-200">
+                                                    <div className="font-semibold text-purple-900 mb-1">💬 תגובת המאמן:</div>
+                                                    <div className="text-purple-700">{workout.trainerReply}</div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
