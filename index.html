@@ -1017,7 +1017,7 @@ Generate the complete plan now as JSON only.`;
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
+                    ...(apiKey ? { 'x-api-key': apiKey } : {}),
                     'anthropic-version': '2023-06-01',
                     ...extraHeaders
                 },
@@ -1278,7 +1278,7 @@ Critical rules:
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
+                    ...(apiKey ? { 'x-api-key': apiKey } : {}),
                     'anthropic-version': '2023-06-01',
                     ...extraHeaders
                 },
@@ -4444,10 +4444,10 @@ Critical rules:
 
                                 <div className="mb-6">
                                     <label className="block text-gray-700 font-semibold mb-2">
-                                        כתובת פרוקסי — פתרון CORS (אופציונלי)
+                                        כתובת פרוקסי — Claude ללא מפתח API (אופציונלי)
                                     </label>
                                     <p className="text-sm text-gray-500 mb-3">
-                                        אם מופיעה שגיאת "שגיאת חיבור לשרת AI" / CORS, הגדר Cloudflare Worker לפי הקובץ <code className="bg-gray-100 px-1 rounded">cloudflare-worker.js</code> ב-GitHub והכנס כאן את כתובתו.
+                                        אם הוגדר Cloudflare Worker עם מפתח API מוטמע (ראה <code className="bg-gray-100 px-1 rounded">cloudflare-worker.js</code> ב-GitHub), הכנס כאן את כתובתו — ואז <strong>אין צורך במפתח API של Claude</strong>. גם פותר שגיאות CORS.
                                     </p>
                                     <input
                                         type="text"
@@ -4577,7 +4577,8 @@ Critical rules:
             const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = (allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both' || allowedAI === 'gemini') ? (localStorage.getItem('geminiApiKey') || '') : '';
             const groqApiKey = (allowedAI === 'groq' || allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('groqApiKey') || '') : '';
-            const hasAiProvider = !!(claudeApiKey || geminiApiKey || groqApiKey);
+            const claudeViaProxy = !!(localStorage.getItem('anthropicProxyUrl') && (allowedAI === 'all' || allowedAI === 'both'));
+            const hasAiProvider = !!(claudeApiKey || claudeViaProxy || geminiApiKey || groqApiKey);
 
             const [formData, setFormData] = useState(() => {
                 if (sourceTrainee) {
@@ -4663,8 +4664,9 @@ Critical rules:
                     setImportError('אנא הכנס תוכנית אימונים לייבוא');
                     return;
                 }
-                if (!claudeApiKey) {
-                    setImportError('נדרש מפתח API של Claude להמרת התוכנית. הגדר אותו בהגדרות.');
+                const proxyUrl = localStorage.getItem('anthropicProxyUrl') || '';
+                if (!claudeApiKey && !proxyUrl) {
+                    setImportError('נדרש מפתח API של Claude או כתובת פרוקסי להמרת התוכנית. הגדר אחד מהם בהגדרות.');
                     return;
                 }
                 if (!formData.name) {
@@ -4731,7 +4733,7 @@ Rules:
 
                     const response = await fetch(apiEndpoint, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', ...extraHeaders },
+                        headers: { 'Content-Type': 'application/json', ...(claudeApiKey ? { 'x-api-key': claudeApiKey } : {}), 'anthropic-version': '2023-06-01', ...extraHeaders },
                         body: JSON.stringify({
                             model: 'claude-sonnet-4-6',
                             max_tokens: 8000,
@@ -4921,7 +4923,7 @@ Rules:
                         onBack={() => setStep('form')}
                         onSave={handleSavePlan}
                         onRegenerate={handleRegeneratePlan}
-                        onAiRegenerate={claudeApiKey && !sourceTrainee ? async (sp) => {
+                        onAiRegenerate={(claudeApiKey || claudeViaProxy) && !sourceTrainee ? async (sp) => {
                             setAiLoading(true);
                             try {
                                 const updatedForm = { ...formData, customInstructions: sp || formData.customInstructions || '' };
@@ -5619,7 +5621,7 @@ Rules:
                                 )}
 
                                 <div className={hasAiProvider ? 'grid grid-cols-1 gap-3' : ''}>
-                                    {claudeApiKey && !sourceTrainee && (
+                                    {(claudeApiKey || claudeViaProxy) && !sourceTrainee && (
                                         <button
                                             type="button"
                                             onClick={(e) => handleAiGenerate(e, 'claude')}
@@ -5704,7 +5706,7 @@ Rules:
                                             </div>
                                         )}
                                         <div className="grid grid-cols-1 gap-3">
-                                            {claudeApiKey && (
+                                            {(claudeApiKey || claudeViaProxy) && (
                                                 <button
                                                     type="button"
                                                     onClick={() => handleFreeTextGenerate('claude')}
@@ -5746,7 +5748,7 @@ Rules:
                                                     )}
                                                 </button>
                                             )}
-                                            {!claudeApiKey && !geminiApiKey && (
+                                            {!claudeApiKey && !claudeViaProxy && !geminiApiKey && (
                                                 <div className="text-center text-sm text-gray-500 py-4">הגדר מפתח API (Claude או Gemini) בהגדרות כדי להשתמש ב-AI</div>
                                             )}
                                         </div>
@@ -5809,6 +5811,7 @@ Rules:
             const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = (allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both' || allowedAI === 'gemini') ? (localStorage.getItem('geminiApiKey') || '') : '';
             const groqApiKey = (allowedAI === 'groq' || allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('groqApiKey') || '') : '';
+            const claudeViaProxy = !!(localStorage.getItem('anthropicProxyUrl') && (allowedAI === 'all' || allowedAI === 'both'));
 
             const handleSavePlan = async () => {
                 setSaving(true);
@@ -5902,7 +5905,7 @@ Rules:
                     onBack={onBack}
                     onSave={handleSavePlan}
                     onRegenerate={handleRegeneratePlan}
-                    onAiRegenerate={claudeApiKey ? handleAiRegenerate : null}
+                    onAiRegenerate={(claudeApiKey || claudeViaProxy) ? handleAiRegenerate : null}
                     onAiRegenerateGemini={geminiApiKey ? handleAiRegenerateGemini : null}
                     onAiRegenerateGroq={groqApiKey ? handleAiRegenerateGroq : null}
                     aiRegenerateLoading={aiLoading}
@@ -5926,6 +5929,7 @@ Rules:
             const [systemPrompt, setSystemPrompt] = useState('');
             const [addMenuOpen, setAddMenuOpen] = useState(null);
             const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
+            const claudeViaProxy = !!(localStorage.getItem('anthropicProxyUrl') && (allowedAI === 'all' || allowedAI === 'both'));
 
             const currentWeek = workoutPlan.weeks[selectedWeek];
 
@@ -6154,7 +6158,7 @@ body { font-family: Arial, sans-serif; direction: rtl; }
             };
 
             const handleGetAISuggestions = async () => {
-                if (claudeApiKey) {
+                if (claudeApiKey || claudeViaProxy) {
                     setAiSuggestionsLoading(true);
                     setShowSuggestions(true);
                     setAiSuggestion('');
@@ -6167,7 +6171,7 @@ body { font-family: Arial, sans-serif; direction: rtl; }
                         const planSummary = JSON.stringify({ duration: workoutPlan.duration, workoutsPerWeek: workoutPlan.workoutsPerWeek, firstWeek: workoutPlan.weeks?.[0] }, null, 2);
                         const response = await fetch(apiEndpoint, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', ...extraHeaders },
+                            headers: { 'Content-Type': 'application/json', ...(claudeApiKey ? { 'x-api-key': claudeApiKey } : {}), 'anthropic-version': '2023-06-01', ...extraHeaders },
                             body: JSON.stringify({
                                 model: 'claude-haiku-4-5-20251001',
                                 max_tokens: 600,
@@ -8180,7 +8184,8 @@ ${traineeLink}
             const claudeApiKey = (allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('claudeApiKey') || '') : '';
             const geminiApiKey = (allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both' || allowedAI === 'gemini') ? (localStorage.getItem('geminiApiKey') || '') : '';
             const groqApiKey = (allowedAI === 'groq' || allowedAI === 'groq_gemini' || allowedAI === 'all' || allowedAI === 'both') ? (localStorage.getItem('groqApiKey') || '') : '';
-            const hasAiProvider = !!(claudeApiKey || geminiApiKey || groqApiKey);
+            const claudeViaProxy = !!(localStorage.getItem('anthropicProxyUrl') && (allowedAI === 'all' || allowedAI === 'both'));
+            const hasAiProvider = !!(claudeApiKey || claudeViaProxy || geminiApiKey || groqApiKey);
 
             const availableTrainees = trainees.filter(t => !t.archived && !t.isDraft && t.workoutPlan);
 
@@ -8335,7 +8340,7 @@ ${traineeLink}
                                             )}
                                         </button>
                                     )}
-                                    {claudeApiKey && (
+                                    {(claudeApiKey || claudeViaProxy) && (
                                         <button
                                             type="button"
                                             onClick={() => handleGroupAiGenerate('claude')}
