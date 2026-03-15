@@ -8191,23 +8191,34 @@ ${traineeLink}
 
             const handleGroupAiGenerate = async (provider) => {
                 if (!aiText.trim()) { setAiError('אנא הכנס תיאור של התוכנית הקבוצתית'); return; }
+                if (!programName.trim()) { setAiError('אנא הכנס שם לתוכנית לפני יצירה עם AI'); return; }
                 setAiError(null);
                 setAiLoading(true);
                 try {
-                    const fakeFormData = { name: programName.trim() || 'תוכנית קבוצתית' };
+                    const fakeFormData = { name: programName.trim() };
                     const approvedExercises = getAllExerciseNames([]);
                     const plan = provider === 'gemini'
                         ? await generatePlanWithGemini(fakeFormData, geminiApiKey, { naturalDescription: aiText, approvedExercises })
                         : provider === 'groq'
                         ? await generatePlanWithGroq(fakeFormData, groqApiKey, { naturalDescription: aiText, approvedExercises })
                         : await generatePlanWithClaude(fakeFormData, claudeApiKey, { naturalDescription: aiText, approvedExercises });
-                    setAiGeneratedPlan(plan);
-                    setSelectedTraineeId('');
+                    // Auto-save immediately after generation
+                    setSaving(true);
+                    const program = {
+                        id: 'gp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        name: programName.trim(),
+                        description: description.trim(),
+                        workoutPlan: plan,
+                        registrationOpen: true
+                    };
+                    await groupStorage.saveGroupProgram(program);
+                    onComplete();
                 } catch (err) {
                     const msg = err.message || '';
                     setAiError(msg || 'שגיאה ביצירת תוכנית עם AI');
                 } finally {
                     setAiLoading(false);
+                    setSaving(false);
                 }
             };
 
