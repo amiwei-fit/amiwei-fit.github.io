@@ -1172,12 +1172,23 @@ Generate the complete plan now as JSON only.`;
             const EDIT_SYSTEM_PROMPT = `You are an expert personal trainer. You receive an existing workout plan as JSON and a specific modification request. Your job is to apply ONLY the requested changes and return the complete modified plan.\n\nCritical rules:\n- Modify ONLY what is explicitly requested — nothing more\n- Keep ALL other weeks, workouts, exercises, sets, reps, rest periods, notes, phases, and structure IDENTICAL to the input\n- All text must remain in Hebrew\n- Return the complete plan as valid JSON only — no markdown, no explanation${trainerContextSection}`;
             const workoutProgress = {};
             const strippedPlan = JSON.parse(JSON.stringify(currentPlan));
+            const warmupNames = ['חימום', 'חימום ומתיחות דינמיות', 'מתיחות לשחרור'];
             strippedPlan.weeks?.forEach(week => {
                 week.workouts?.forEach(workout => {
                     const key = `${week.weekNumber}|${workout.day}`;
                     workoutProgress[key] = { completed: workout.completed, feedback: workout.feedback, difficulty: workout.difficulty };
                     delete workout.completed; delete workout.feedback; delete workout.difficulty;
-                    workout.exercises?.forEach(ex => { delete ex.videoUrl; });
+                    // Strip warmup/cooldown (re-added after) and keep only essential exercise fields
+                    workout.exercises = (workout.exercises || [])
+                        .filter(ex => !warmupNames.some(n => ex.name?.includes(n)))
+                        .map(ex => ({
+                            name: ex.name,
+                            ...(ex.sets !== undefined && { sets: ex.sets }),
+                            ...(ex.reps !== undefined && { reps: ex.reps }),
+                            ...(ex.rest !== undefined && { rest: ex.rest }),
+                            ...(ex.duration !== undefined && { duration: ex.duration }),
+                            ...(ex.notes && { notes: ex.notes }),
+                        }));
                 });
             });
             const traineeSummary = [
@@ -1196,7 +1207,7 @@ Generate the complete plan now as JSON only.`;
                         { role: 'system', content: EDIT_SYSTEM_PROMPT },
                         { role: 'user', content: userMessage }
                     ],
-                    max_tokens: 8192,
+                    max_tokens: 4096,
                     temperature: 0.7
                 })
             });
