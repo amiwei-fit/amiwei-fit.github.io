@@ -8198,6 +8198,7 @@ ${traineeLink}
             const { allowedAI } = React.useContext(TrainerContext);
             const [programName, setProgramName] = useState('');
             const [description, setDescription] = useState('');
+            const [equipment, setEquipment] = useState('');
             const [selectedTraineeId, setSelectedTraineeId] = useState('');
             const [saving, setSaving] = useState(false);
             const [aiLoading, setAiLoading] = useState(false);
@@ -8231,6 +8232,7 @@ ${traineeLink}
                         id: 'gp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                         name: programName.trim(),
                         description: description.trim(),
+                        equipment: equipment.trim(),
                         workoutPlan: plan,
                         registrationOpen: true
                     };
@@ -8274,6 +8276,7 @@ ${traineeLink}
                         id: 'gp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                         name: programName.trim(),
                         description: description.trim(),
+                        equipment: equipment.trim(),
                         workoutPlan,
                         registrationOpen: true
                     };
@@ -8318,6 +8321,16 @@ ${traineeLink}
                                         onChange={(e) => setDescription(e.target.value)}
                                         rows="3"
                                         placeholder="תיאור קצר של התוכנית..."
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">ציוד נדרש (אופציונלי)</label>
+                                    <input
+                                        type="text"
+                                        value={equipment}
+                                        onChange={(e) => setEquipment(e.target.value)}
+                                        placeholder="לדוגמה: מכון כושר מלא, משקולות, גומיות התנגדות"
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                     />
                                 </div>
@@ -8683,6 +8696,9 @@ ${traineeLink}
             const [selectedMember, setSelectedMember] = useState(null);
             const [editingPlan, setEditingPlan] = useState(false);
             const [currentProgram, setCurrentProgram] = useState(program);
+            const [editingEquipment, setEditingEquipment] = useState(false);
+            const [equipmentDraft, setEquipmentDraft] = useState(program.equipment || '');
+            const [savingEquipment, setSavingEquipment] = useState(false);
 
             useEffect(() => { loadMembers(); }, [program.id]);
 
@@ -8740,6 +8756,43 @@ ${traineeLink}
                         </div>
                     </div>
                     <div className="max-w-6xl mx-auto p-6 space-y-6">
+                        <div className="bg-white rounded-2xl shadow-lg p-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <h2 className="text-lg font-bold text-gray-800">🏋️ ציוד נדרש</h2>
+                                {!editingEquipment && (
+                                    <button onClick={() => setEditingEquipment(true)} className="text-sm text-purple-600 hover:text-purple-800 font-medium">✏️ ערוך</button>
+                                )}
+                            </div>
+                            {editingEquipment ? (
+                                <div className="flex gap-2 mt-2">
+                                    <input
+                                        type="text"
+                                        value={equipmentDraft}
+                                        onChange={(e) => setEquipmentDraft(e.target.value)}
+                                        placeholder="לדוגמה: מכון כושר מלא, משקולות, גומיות התנגדות"
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            setSavingEquipment(true);
+                                            try {
+                                                await groupStorage.updateGroupProgram(currentProgram.id, { equipment: equipmentDraft.trim() });
+                                                setCurrentProgram(prev => ({ ...prev, equipment: equipmentDraft.trim() }));
+                                                setEditingEquipment(false);
+                                            } catch (e) { alert('שגיאה בשמירה: ' + e.message); }
+                                            finally { setSavingEquipment(false); }
+                                        }}
+                                        disabled={savingEquipment}
+                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold rounded-lg transition"
+                                    >
+                                        {savingEquipment ? 'שומר...' : 'שמור'}
+                                    </button>
+                                    <button onClick={() => { setEquipmentDraft(currentProgram.equipment || ''); setEditingEquipment(false); }} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition">ביטול</button>
+                                </div>
+                            ) : (
+                                <p className="text-gray-600 text-sm mt-1">{currentProgram.equipment || <span className="text-gray-400 italic">לא הוגדר ציוד</span>}</p>
+                            )}
+                        </div>
                         {currentProgram.workoutPlan && (
                             <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center justify-between">
                                 <div>
@@ -8968,6 +9021,11 @@ ${traineeLink}
                             <div className="text-6xl mb-4">🏋️</div>
                             <h1 className="text-2xl font-bold text-gray-800 mb-2">{program.name}</h1>
                             {program.description && <p className="text-gray-500 text-sm mb-3">{program.description}</p>}
+                            {program.equipment && (
+                                <div className="bg-purple-50 rounded-lg px-4 py-2 mb-3 text-sm text-purple-800">
+                                    🏋️ <strong>ציוד נדרש:</strong> {program.equipment}
+                                </div>
+                            )}
                             <p className="text-gray-600">הירשם לתוכנית האימונים</p>
                         </div>
                         <form onSubmit={handleSubmit} className="space-y-4">
