@@ -45,7 +45,7 @@
 
         /* ── Card image ── */
         .card-img-wrapper {
-            height: 210px;
+            height: 230px;
             overflow: hidden;
             position: relative;
         }
@@ -59,7 +59,7 @@
         .product-card:hover .card-img { transform: scale(1.08); }
         .card-img-placeholder {
             width: 100%;
-            height: 210px;
+            height: 230px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -74,7 +74,7 @@
         }
 
         /* ── Score bar ── */
-        .score-bar { height: 7px; border-radius: 9999px; background: rgba(0,0,0,0.12); overflow: hidden; }
+        .score-bar { height: 8px; border-radius: 9999px; background: rgba(0,0,0,0.12); overflow: hidden; }
         .score-fill { height: 100%; border-radius: 9999px; transition: width 1.1s cubic-bezier(0.4,0,0.2,1); }
 
         /* ── Tag ── */
@@ -434,7 +434,7 @@
             if (!key || wikiImgCache[key] !== undefined) return;
             wikiImgCache[key] = null; // mark as attempted
 
-            // Pass 1: Wikipedia article thumbnail
+            // Pass 1: Wikipedia article thumbnail (fast, direct URL)
             if (p.wikiTitle) {
                 try {
                     const res = await fetch(
@@ -447,20 +447,25 @@
                 } catch {}
             }
 
-            // Pass 2: Wikimedia Commons image search (millions of product photos)
+            // Pass 2: Wikimedia Commons — generator search + imageinfo in ONE call
+            // Returns actual direct thumbnail URLs (no redirect, guaranteed to load)
             try {
                 const q = p.nameEn || p.wikiTitle || `${p.brand || ''} ${p.name || ''}`;
                 const res = await fetch(
-                    `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srnamespace=6&srlimit=8&format=json&origin=*`
+                    `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrnamespace=6&gsrlimit=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`
                 );
                 if (res.ok) {
                     const d = await res.json();
-                    for (const r of (d.query?.search || [])) {
-                        const fn = r.title.replace(/^File:/, '');
-                        // Skip non-photo formats and likely logos/icons
-                        if (/\.(svg|gif|tiff?)$/i.test(fn)) continue;
-                        if (/logo|icon|vector|symbol/i.test(fn)) continue;
-                        wikiImgCache[key] = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fn)}?width=400`;
+                    const pages = Object.values(d.query?.pages || {})
+                        .sort((a, b) => (a.index ?? 99) - (b.index ?? 99));
+                    for (const page of pages) {
+                        const title = (page.title || '').toLowerCase();
+                        const thumb = page.imageinfo?.[0]?.thumburl;
+                        if (!thumb) continue;
+                        // Skip logos, icons, diagrams, maps, flags, text-only images
+                        if (/logo|icon|vector|symbol|stamp|map|diagram|flag|coat|arms|emblem|pictogram/i.test(title)) continue;
+                        if (/\.svg$/i.test(title) || /\.gif$/i.test(title)) continue;
+                        wikiImgCache[key] = thumb;
                         return;
                     }
                 }
@@ -498,29 +503,29 @@
                 <div class="card-img-overlay"></div>
             </div>
             <!-- Body -->
-            <div class="p-5">
-                <div class="flex items-start justify-between mb-3">
+            <div class="p-6">
+                <div class="flex items-start justify-between mb-4">
                     <div class="flex-1 ml-3">
-                        <p class="text-sm font-bold ${cfg.textCls} opacity-55 uppercase tracking-wider mb-0.5">${product.brand || ''}</p>
-                        <h3 class="text-xl font-black ${cfg.textCls} leading-snug">${product.name || ''}</h3>
-                        ${product.nameEn && product.nameEn !== product.name ? `<p class="text-xs ${cfg.textCls} opacity-35 mt-0.5 leading-tight">${product.nameEn}</p>` : ''}
+                        <p class="text-sm font-bold ${cfg.textCls} opacity-55 uppercase tracking-wider mb-1">${product.brand || ''}</p>
+                        <h3 class="text-2xl font-black ${cfg.textCls} leading-tight">${product.name || ''}</h3>
+                        ${product.nameEn && product.nameEn !== product.name ? `<p class="text-xs ${cfg.textCls} opacity-35 mt-1 leading-tight">${product.nameEn}</p>` : ''}
                     </div>
                     <div class="text-left shrink-0">
                         <p class="text-xs ${cfg.textCls} opacity-50 mb-0.5">מחיר</p>
-                        <p class="font-black ${cfg.textCls} text-base">${price}</p>
+                        <p class="font-black ${cfg.textCls} text-lg">${price}</p>
                     </div>
                 </div>
 
-                <div class="space-y-2.5 mb-4">
+                <div class="space-y-3 mb-4">
                     <div>
-                        <div class="flex justify-between mb-1">
+                        <div class="flex justify-between mb-1.5">
                             <span class="text-sm font-semibold ${cfg.textCls} opacity-60">עמידות</span>
                             <span class="text-sm font-black ${cfg.textCls}">${dScore}/10</span>
                         </div>
                         ${renderScoreBar(dScore, cfg.scoreColor)}
                     </div>
                     <div>
-                        <div class="flex justify-between mb-1">
+                        <div class="flex justify-between mb-1.5">
                             <span class="text-sm font-semibold ${cfg.textCls} opacity-60">איכות</span>
                             <span class="text-sm font-black ${cfg.textCls}">${qScore}/10</span>
                         </div>
@@ -528,7 +533,7 @@
                     </div>
                 </div>
 
-                <ul class="${cfg.textCls} opacity-80 text-sm space-y-1.5 mb-4">
+                <ul class="${cfg.textCls} opacity-80 text-base space-y-2 mb-4">
                     ${f1 ? `<li class="flex items-center gap-2"><span class="opacity-40">▸</span>${f1}</li>` : ''}
                     ${f2 ? `<li class="flex items-center gap-2"><span class="opacity-40">▸</span>${f2}</li>` : ''}
                 </ul>
@@ -538,8 +543,8 @@
                     ${con ? `<span class="tag bg-red-100/80 text-red-800">✗ ${con}</span>`   : ''}
                 </div>
 
-                <button class="expand-hint ${cfg.textCls}">
-                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                <button class="expand-hint ${cfg.textCls}" style="font-size:13px;">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
                     פרטים נוספים, ביקורות וקנייה
                 </button>
             </div>
@@ -565,24 +570,36 @@
         const imgUrl    = wikiImg || claudeImg || loremUrl;
         const skipFallback = !!wikiImg || !claudeImg;
 
-        // Buy links: price-sorted, new products only, no second-hand
+        // Buy links — all search-based so they always find the specific product
         const rawName = data.nameEn || `${data.brand || ''} ${data.name || ''}`;
-        const qHe   = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
-        const qEnQ  = encodeURIComponent(`"${rawName}"`);   // exact match with quotes
-        const asin  = /^[A-Z0-9]{10}$/.test(data.asin || '') ? data.asin : null;
-        const rawSite = sanitizeUrl(data.siteUrl);
-        const siteUrl = (() => {
-            if (!rawSite) return null;
-            try { return new URL(rawSite).pathname.replace(/\/$/, '').split('/').filter(Boolean).length >= 2 ? rawSite : null; }
-            catch { return null; }
-        })();
+        const qHe  = encodeURIComponent(`${data.brand || ''} ${data.name || ''}`);
+        const qEn  = encodeURIComponent(rawName);
+        const qEnQ = encodeURIComponent(`"${rawName}"`); // exact phrase in quotes
         const stores = [
-            ...(siteUrl ? [{ name:'אתר המותג', icon:'🏪', bg:'#7c3aed', url:siteUrl, badge:'ישיר' }] : []),
-            asin
-                ? { name:'Amazon', icon:'📦', bg:'#ff9900', url:`https://www.amazon.co.il/dp/${asin}`, badge:'ישיר' }
-                : { name:'Amazon', icon:'📦', bg:'#ff9900', url:`https://www.amazon.co.il/s?k=${qEnQ}&s=price-asc-rank`, badge:'↓ מחיר' },
-            { name:'Google Shopping', icon:'🛍️', bg:'#4285f4', url:`https://www.google.com/search?tbm=shop&q=${qEnQ}&tbs=p_ord:p&hl=iw`, badge:'↓ מחיר' },
-            { name:'ZAP', icon:'💰', bg:'#e74c3c', url:`https://www.zap.co.il/search.aspx?keyword=${qHe}` },
+            {
+                name: 'Google Shopping',
+                icon: '🛍️', bg: '#4285f4',
+                url: `https://www.google.com/search?tbm=shop&q=${qEnQ}&tbs=p_ord:p&gl=il&hl=iw`,
+                badge: '↓ מחיר'
+            },
+            {
+                name: 'Amazon',
+                icon: '📦', bg: '#ff9900',
+                url: `https://www.amazon.co.il/s?k=${qEnQ}&s=price-asc-rank`,
+                badge: '↓ מחיר'
+            },
+            {
+                name: 'ZAP',
+                icon: '💰', bg: '#c0392b',
+                url: `https://www.zap.co.il/search.aspx?keyword=${qHe}&orderby=2`,
+                badge: '↓ מחיר'
+            },
+            {
+                name: 'KSP',
+                icon: '🖥️', bg: '#1a56db',
+                url: `https://ksp.co.il/search?key=${qEn}`,
+                badge: ''
+            },
         ];
         const buyHtml = stores.map(s =>
             `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="buy-btn" style="background:${s.bg}22;border-color:${s.bg}55;">
@@ -623,12 +640,12 @@
                 <div class="grid grid-cols-2 gap-4 mb-5">
                     <div class="score-tile">
                         <p class="text-3xl font-black mb-0.5">${dScore}<span class="text-sm text-gray-500">/10</span></p>
-                        <p class="text-xs text-gray-500 mb-2">עמידות</p>
+                        <p class="text-sm text-gray-500 mb-2">עמידות</p>
                         ${renderScoreBar(dScore, cfg.scoreColor)}
                     </div>
                     <div class="score-tile">
                         <p class="text-3xl font-black mb-0.5">${qScore}<span class="text-sm text-gray-500">/10</span></p>
-                        <p class="text-xs text-gray-500 mb-2">איכות</p>
+                        <p class="text-sm text-gray-500 mb-2">איכות</p>
                         ${renderScoreBar(qScore, cfg.scoreColor)}
                     </div>
                 </div>
