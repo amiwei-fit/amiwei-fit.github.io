@@ -22,6 +22,8 @@
     <script src="https://unpkg.com/html-docx-js/dist/html-docx.js"></script>
     <!-- PDF text extraction -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Trainer knowledge base (committed reference documents) -->
+    <script src="trainer-docs.js"></script>
     
     <style>
         body {
@@ -510,11 +512,15 @@
 
         // ── Trainer Documents (reference library) ─────────────────────────────
         const TRAINER_DOCS_KEY = 'trainerReferenceDocs';
-        const MAX_DOC_CHARS = 40000; // ~10k tokens total budget for all docs
+        const MAX_DOC_CHARS = 80000; // total chars injected into each AI prompt across all docs
 
         const getTrainerReferenceDocs = () => {
-            try { return JSON.parse(localStorage.getItem(TRAINER_DOCS_KEY) || '[]'); }
-            catch { return []; }
+            // Merge builtin docs (from trainer-docs.js) + user-uploaded docs (from localStorage)
+            const builtin = (typeof TRAINER_KNOWLEDGE_BASE !== 'undefined') ? TRAINER_KNOWLEDGE_BASE : [];
+            try {
+                const stored = JSON.parse(localStorage.getItem(TRAINER_DOCS_KEY) || '[]');
+                return [...builtin, ...stored];
+            } catch { return builtin; }
         };
         const saveTrainerReferenceDocs = (docs) => {
             localStorage.setItem(TRAINER_DOCS_KEY, JSON.stringify(docs));
@@ -3856,15 +3862,17 @@ Critical rules:
                     {docs.length > 0 && (
                         <div className="space-y-2 mb-4">
                             {docs.map(doc => (
-                                <div key={doc.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2">
+                                <div key={doc.id} className={`flex items-center justify-between rounded-lg px-4 py-2 border ${doc.type === 'builtin' ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}>
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-lg">{doc.type === 'pdf' ? '📄' : '🔗'}</span>
+                                        <span className="text-lg">{doc.type === 'builtin' ? '📚' : doc.type === 'pdf' ? '📄' : '🔗'}</span>
                                         <div className="min-w-0">
                                             <p className="font-medium text-gray-800 text-sm truncate">{doc.name}</p>
-                                            <p className="text-xs text-gray-400">{doc.content.length.toLocaleString()} תווים</p>
+                                            <p className="text-xs text-gray-400">{doc.content.length.toLocaleString()} תווים{doc.type === 'builtin' ? ' · מובנה בקוד' : ''}</p>
                                         </div>
                                     </div>
-                                    <button onClick={() => handleDelete(doc.id)} className="text-red-400 hover:text-red-600 text-sm font-medium mr-2 flex-shrink-0">מחק</button>
+                                    {doc.type !== 'builtin' && (
+                                        <button onClick={() => handleDelete(doc.id)} className="text-red-400 hover:text-red-600 text-sm font-medium mr-2 flex-shrink-0">מחק</button>
+                                    )}
                                 </div>
                             ))}
                         </div>
