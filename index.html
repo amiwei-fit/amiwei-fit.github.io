@@ -548,15 +548,22 @@
                 const res = await fetch(exportUrl);
                 if (res.ok) return await res.text();
             }
-            // General CORS proxy fallback
+            // General CORS proxy
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
             if (!res.ok) throw new Error('לא ניתן לטעון את הקישור');
             const html = await res.text();
-            // Strip HTML tags
-            const div = document.createElement('div');
-            div.innerHTML = html;
-            return div.innerText || div.textContent || '';
+            // Clean HTML: remove scripts, styles, nav, footer, header
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            ['script','style','nav','header','footer','noscript','aside','iframe'].forEach(tag => {
+                tmp.querySelectorAll(tag).forEach(el => el.remove());
+            });
+            // Try to find main content area
+            const main = tmp.querySelector('main, article, [role="main"], .content, #content, .post, .article');
+            const text = (main || tmp).innerText || (main || tmp).textContent || '';
+            // Collapse whitespace
+            return text.replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
         };
 
         // ── Shared AI plan helpers ─────────────────────────────────────────────
@@ -3782,6 +3789,7 @@ Critical rules:
             const [urlInput, setUrlInput] = useState('');
             const [urlName, setUrlName] = useState('');
             const [loading, setLoading] = useState(false);
+            const [refreshingId, setRefreshingId] = useState(null);
             const [error, setError] = useState(null);
             const [success, setSuccess] = useState(null);
 
@@ -3841,6 +3849,23 @@ Critical rules:
                 persist(docs.filter(d => d.id !== id));
             };
 
+            const handleRefresh = async (doc) => {
+                if (!doc.url) return;
+                setRefreshingId(doc.id);
+                setError(null);
+                try {
+                    const text = await fetchUrlText(doc.url);
+                    if (!text || text.trim().length < 50) { notify('לא הצלחתי לחלץ תוכן מהקישור', true); return; }
+                    const updated = docs.map(d => d.id === doc.id ? { ...d, content: text.trim().slice(0, 30000), addedAt: new Date().toISOString() } : d);
+                    persist(updated);
+                    notify(`✓ "${doc.name}" עודכן (${Math.min(text.trim().length, 30000).toLocaleString()} תווים)`);
+                } catch (err) {
+                    notify('לא הצלחתי לרענן: ' + err.message, true);
+                } finally {
+                    setRefreshingId(null);
+                }
+            };
+
             return (
                 <div className="mb-6">
                     <div className="flex items-center justify-between mb-1">
@@ -3852,7 +3877,8 @@ Critical rules:
                         )}
                     </div>
                     <p className="text-sm text-gray-500 mb-3">
-                        העלה PDF או הוסף קישור לגוגל דוקס ציבורי. ה-AI ישתמש במסמכים האלו בכל בניית תוכנית אימון.
+                        העלה PDF, הוסף קישור לאתר אינטרנט או לגוגל דוקס. ה-AI ישתמש במסמכים האלו בכל בניית תוכנית אימון.
+                        המסמכים נשמרים אוטומטית בדפדפן ונשארים לצמיתות — אין צורך להעלות מחדש.
                     </p>
 
                     {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm mb-3">⚠️ {error}</div>}
@@ -3864,14 +3890,30 @@ Critical rules:
                             {docs.map(doc => (
                                 <div key={doc.id} className={`flex items-center justify-between rounded-lg px-4 py-2 border ${doc.type === 'builtin' ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}>
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-lg">{doc.type === 'builtin' ? '📚' : doc.type === 'pdf' ? '📄' : '🔗'}</span>
+                                        <span className="text-lg">{doc.type === 'builtin' ? '📚' : doc.type === 'pdf' ? '📄' : '🌐'}</span>
                                         <div className="min-w-0">
                                             <p className="font-medium text-gray-800 text-sm truncate">{doc.name}</p>
-                                            <p className="text-xs text-gray-400">{doc.content.length.toLocaleString()} תווים{doc.type === 'builtin' ? ' · מובנה בקוד' : ''}</p>
+                                            <p className="text-xs text-gray-400">
+                                                {doc.content.length.toLocaleString()} תווים
+                                                {doc.type === 'builtin' ? ' · מובנה בקוד' : ''}
+                                                {doc.url ? ` · ${doc.url.slice(0, 40)}${doc.url.length > 40 ? '...' : ''}` : ''}
+                                            </p>
                                         </div>
                                     </div>
                                     {doc.type !== 'builtin' && (
-                                        <button onClick={() => handleDelete(doc.id)} className="text-red-400 hover:text-red-600 text-sm font-medium mr-2 flex-shrink-0">מחק</button>
+                                        <div className="flex gap-2 mr-2 flex-shrink-0">
+                                            {doc.url && (
+                                                <button
+                                                    onClick={() => handleRefresh(doc)}
+                                                    disabled={refreshingId === doc.id}
+                                                    className="text-blue-400 hover:text-blue-600 text-xs font-medium disabled:opacity-50"
+                                                    title="רענן תוכן מהקישור"
+                                                >
+                                                    {refreshingId === doc.id ? '⏳' : '🔄 רענן'}
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleDelete(doc.id)} className="text-red-400 hover:text-red-600 text-sm font-medium">מחק</button>
+                                        </div>
                                     )}
                                 </div>
                             ))}
@@ -3900,7 +3942,7 @@ Critical rules:
                                 type="url"
                                 value={urlInput}
                                 onChange={e => setUrlInput(e.target.value)}
-                                placeholder="קישור לגוגל דוקס ציבורי..."
+                                placeholder="קישור לאתר אינטרנט או Google Docs..."
                                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                 dir="ltr"
                             />
@@ -3909,10 +3951,10 @@ Critical rules:
                                 disabled={loading || !urlInput.trim()}
                                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition"
                             >
-                                {loading ? '...' : 'הוסף'}
+                                {loading ? '⏳' : 'הוסף'}
                             </button>
                         </div>
-                        <p className="text-xs text-gray-400">לקישורי Google Docs — ודא שהמסמך מוגדר כ"כל מי שיש לו קישור"</p>
+                        <p className="text-xs text-gray-400">עובד עם אתרי אינטרנט רגילים, Google Docs ציבורי, ועמודי מאמרים. התוכן נשמר אוטומטית.</p>
                     </div>
                 </div>
             );
