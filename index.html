@@ -22,6 +22,10 @@
     <script src="https://unpkg.com/html-docx-js/dist/html-docx.js"></script>
     <!-- PDF text extraction -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Word (.docx) text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Excel (.xlsx/.xls) text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Trainer knowledge base (committed reference documents) -->
     <script src="trainer-docs.js"></script>
     
@@ -620,6 +624,33 @@
                 text += content.items.map(item => item.str).join(' ') + '\n';
             }
             return text.trim();
+        };
+
+        const extractWordText = async (file) => {
+            if (typeof mammoth === 'undefined') throw new Error('mammoth.js לא נטען');
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            return result.value.trim();
+        };
+
+        const extractExcelText = async (file) => {
+            if (typeof XLSX === 'undefined') throw new Error('SheetJS לא נטען');
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            let text = '';
+            for (const sheetName of workbook.SheetNames) {
+                text += `=== ${sheetName} ===\n`;
+                text += XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]) + '\n\n';
+            }
+            return text.trim();
+        };
+
+        const extractFileText = async (file) => {
+            const n = file.name.toLowerCase();
+            if (n.endsWith('.pdf')) return extractPdfText(file);
+            if (n.endsWith('.docx') || n.endsWith('.doc')) return extractWordText(file);
+            if (n.endsWith('.xlsx') || n.endsWith('.xls')) return extractExcelText(file);
+            throw new Error('סוג קובץ לא נתמך (.pdf, .docx, .xlsx בלבד)');
         };
 
         const fetchUrlText = async (url) => {
@@ -3886,24 +3917,43 @@ Critical rules:
                 setTimeout(() => { setError(null); setSuccess(null); }, 4000);
             };
 
-            const handlePdfUpload = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
+            const [uploadProgress, setUploadProgress] = useState('');
+
+            const handleFilesUpload = async (e) => {
+                const files = Array.from(e.target.files);
+                if (!files.length) return;
                 setLoading(true);
                 setError(null);
-                try {
-                    const text = await extractPdfText(file);
-                    if (!text.trim()) { notify('לא נמצא טקסט ב-PDF הזה', true); return; }
-                    const newDoc = { id: Date.now().toString(), name: file.name.replace(/\.pdf$/i, ''), type: 'pdf', content: text, addedAt: new Date().toISOString() };
-                    await saveUserDoc(newDoc);
-                    setUserDocs(prev => [...prev, newDoc]);
-                    notify(`✓ "${newDoc.name}" נוסף (${text.length.toLocaleString()} תווים)`);
-                } catch (err) {
-                    notify('שגיאה בקריאת PDF: ' + err.message, true);
-                } finally {
-                    setLoading(false);
-                    e.target.value = '';
+                const errs = [];
+                let added = 0;
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    setUploadProgress(files.length > 1 ? `מעבד ${i + 1}/${files.length}: ${file.name}` : `מעבד: ${file.name}`);
+                    try {
+                        const text = await extractFileText(file);
+                        if (!text.trim()) { errs.push(`"${file.name}": לא נמצא טקסט`); continue; }
+                        const ext = file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() || '';
+                        const type = ext === 'pdf' ? 'pdf' : (ext === 'xlsx' || ext === 'xls') ? 'excel' : 'word';
+                        const newDoc = {
+                            id: Date.now().toString() + '_' + i,
+                            name: file.name.replace(/\.[^.]+$/, ''),
+                            type,
+                            content: text,
+                            addedAt: new Date().toISOString()
+                        };
+                        await saveUserDoc(newDoc);
+                        setUserDocs(prev => [...prev, newDoc]);
+                        added++;
+                    } catch (err) {
+                        errs.push(`"${file.name}": ${err.message}`);
+                    }
                 }
+                setUploadProgress('');
+                if (errs.length > 0 && added === 0) notify(errs.join(' | '), true);
+                else if (errs.length > 0) notify(`נוספו ${added} קבצים. שגיאות: ${errs.join(' | ')}`, true);
+                else notify(`✓ נוספו ${added} קבצים בהצלחה`);
+                setLoading(false);
+                e.target.value = '';
             };
 
             const handleUrlAdd = async () => {
@@ -3975,7 +4025,7 @@ Critical rules:
                             {allDocs.map(doc => (
                                 <div key={doc.id} className={`flex items-center justify-between rounded-lg px-4 py-2 border ${doc.type === 'builtin' ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}>
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-lg">{doc.type === 'builtin' ? '📚' : doc.type === 'pdf' ? '📄' : '🌐'}</span>
+                                        <span className="text-lg">{doc.type === 'builtin' ? '📚' : doc.type === 'pdf' ? '📄' : doc.type === 'word' ? '📝' : doc.type === 'excel' ? '📊' : '🌐'}</span>
                                         <div className="min-w-0">
                                             <p className="font-medium text-gray-800 text-sm truncate">{doc.name}</p>
                                             <p className="text-xs text-gray-400">
@@ -4005,11 +4055,12 @@ Critical rules:
                         </div>
                     )}
 
-                    {/* Upload PDF */}
+                    {/* Upload files */}
                     <div className="flex gap-2 mb-3">
-                        <label className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-purple-300 rounded-lg cursor-pointer hover:bg-purple-50 transition text-sm text-purple-700 font-medium ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
-                            {loading ? '⏳ טוען...' : '📤 העלה קובץ PDF'}
-                            <input type="file" accept=".pdf" className="hidden" onChange={handlePdfUpload} disabled={loading} />
+                        <label className={`flex-1 flex flex-col items-center justify-center gap-1 px-4 py-3 border-2 border-dashed border-purple-300 rounded-lg cursor-pointer hover:bg-purple-50 transition text-sm text-purple-700 font-medium ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <span>{loading ? `⏳ ${uploadProgress || 'מעבד...'}` : '📤 העלה קבצים (PDF, Word, Excel)'}</span>
+                            {!loading && <span className="text-xs text-purple-400 font-normal">ניתן לבחור מספר קבצים בו זמנית</span>}
+                            <input type="file" accept=".pdf,.docx,.doc,.xlsx,.xls" multiple className="hidden" onChange={handleFilesUpload} disabled={loading} />
                         </label>
                     </div>
 
